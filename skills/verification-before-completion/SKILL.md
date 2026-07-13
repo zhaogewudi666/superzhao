@@ -37,6 +37,14 @@ BEFORE claiming any status or expressing satisfaction:
 Skip any step = lying, not verifying
 ```
 
+## Scope by Risk
+
+- R1: run the narrowest targeted check that proves the requested artifact or value changed correctly; inspect the diff.
+- R2: run focused tests plus affected suites and relevant lint, type, or build checks.
+- R3: run the complete relevant suite, integration or migration checks, security boundaries, and rollback or compensation validation.
+
+Risk scales verification breadth, never the requirement for fresh evidence.
+
 ## Common Failures
 
 | Claim | Requires | Not Sufficient |

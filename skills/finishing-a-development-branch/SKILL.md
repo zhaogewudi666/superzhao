@@ -1,6 +1,6 @@
 ---
 name: finishing-a-development-branch
-description: Use when implementation is complete, all tests pass, and you need to decide how to integrate the work - guides completion of development work by presenting structured options for merge, PR, or cleanup
+description: Use when the task created or managed a branch/worktree, or when the user asks to merge, push, open a PR, keep, discard, or clean up completed development work
 ---
 
 # Finishing a Development Branch
@@ -9,9 +9,19 @@ description: Use when implementation is complete, all tests pass, and you need t
 
 Guide completion of development work by presenting clear options and handling chosen workflow.
 
-**Core principle:** Verify tests → Detect environment → Present options → Execute choice → Clean up.
+**Core principle:** Confirm task ownership or an explicit finishing request → Verify tests → Detect the actual environment → Present options only for task-managed work → Execute choice → Clean up.
 
 **Announce at start:** "I'm using the finishing-a-development-branch skill to complete this work."
+
+## Entry Gate
+
+Before running the finishing workflow, establish why this skill applies:
+
+- If this task created or managed the branch/worktree, continue through the process and offer the appropriate finishing menu.
+- If the user requested a specific finishing action, continue through verification and environment detection, then perform that action directly. Do not replace a specific request with a menu.
+- Otherwise, stop. Do not present a finishing menu for work that neither created nor managed a branch/worktree.
+
+Being located on a branch or in a linked worktree does not prove that this task created or managed it. Use the task's actual actions and recorded provenance.
 
 ## The Process
 
@@ -39,11 +49,13 @@ Stop. Don't proceed to Step 2.
 
 ### Step 2: Detect Environment
 
-**Determine workspace state before presenting options:**
+**Determine the actual current workspace state before presenting options or executing a requested action. Do not infer it from how the task started:**
 
 ```bash
 GIT_DIR=$(cd "$(git rev-parse --git-dir)" 2>/dev/null && pwd -P)
 GIT_COMMON=$(cd "$(git rev-parse --git-common-dir)" 2>/dev/null && pwd -P)
+BRANCH=$(git branch --show-current)
+WORKTREE_PATH=$(git rev-parse --show-toplevel)
 ```
 
 This determines which menu to show and how cleanup works:
@@ -64,6 +76,8 @@ git merge-base HEAD main 2>/dev/null || git merge-base HEAD master 2>/dev/null
 Or ask: "This branch split from main - is that correct?"
 
 ### Step 4: Present Options
+
+Only present a menu when the Entry Gate confirmed that this task created or managed the branch/worktree. If the user requested a specific finishing action, skip the menu and execute that action in Step 5 after any required confirmation.
 
 **Normal repo and named-branch worktree — present exactly these 4 options:**
 
@@ -183,6 +197,12 @@ git worktree prune  # Self-healing: clean up any stale registrations
 
 ## Quick Reference
 
+| Entry condition | Action |
+|-----------------|--------|
+| Task created or managed branch/worktree | Verify, detect, then present the matching menu |
+| User requested a specific finishing action | Verify, detect, then execute that action without a menu |
+| Neither condition applies | Stop; do not present a finishing menu |
+
 | Option | Merge | Push | Keep Worktree | Cleanup Branch |
 |--------|-------|------|---------------|----------------|
 | 1. Merge locally | yes | - | - | yes |
@@ -198,7 +218,11 @@ git worktree prune  # Self-healing: clean up any stale registrations
 
 **Open-ended questions**
 - **Problem:** "What should I do next?" is ambiguous
-- **Fix:** Present exactly 4 structured options (or 3 for detached HEAD)
+- **Fix:** For a task-managed branch/worktree, present exactly 4 structured options (or 3 for detached HEAD)
+
+**Offering a menu without task ownership**
+- **Problem:** Routine work in an existing checkout triggers an irrelevant merge, PR, keep, or discard decision
+- **Fix:** Confirm this task created or managed the branch/worktree before presenting any menu
 
 **Cleaning up worktree for Option 2**
 - **Problem:** Remove worktree user needs for PR iteration
@@ -224,6 +248,7 @@ git worktree prune  # Self-healing: clean up any stale registrations
 
 **Never:**
 - Proceed with failing tests
+- Present a finishing menu for work that neither created nor managed a branch/worktree
 - Merge without verifying tests on result
 - Delete work without confirmation
 - Force-push without explicit request
@@ -233,8 +258,8 @@ git worktree prune  # Self-healing: clean up any stale registrations
 
 **Always:**
 - Verify tests before offering options
-- Detect environment before presenting menu
-- Present exactly 4 options (or 3 for detached HEAD)
+- Detect the actual current environment before presenting a menu or executing a requested action
+- For a task-managed branch/worktree, present exactly 4 options (or 3 for detached HEAD)
 - Get typed confirmation for Option 4
 - Clean up worktree for Options 1 & 4 only
 - `cd` to main repo root before worktree removal

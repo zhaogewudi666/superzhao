@@ -1,15 +1,15 @@
 ---
 name: using-git-worktrees
-description: Use when starting feature work that needs isolation from current workspace or before executing implementation plans - ensures an isolated workspace exists via native tools or git worktree fallback
+description: Use before R3 implementation, parallel writers, long-lived isolated work, or changes that overlap a dirty working tree when the task is in a Git repository
 ---
 
 # Using Git Worktrees
 
 ## Overview
 
-Ensure work happens in an isolated workspace. Prefer your platform's native worktree tools. Fall back to manual git worktrees only when no native tool is available.
+Use an isolated workspace when risk, concurrency, duration, or dirty overlap requires it. Prefer your platform's native worktree tools. Fall back to manual git worktrees only when no native tool is available.
 
-**Core principle:** Detect existing isolation first. Then use native tools. Then fall back to git. Never fight the harness.
+**Core principle:** Detect existing isolation first. Gate new isolation by risk and overlap. Then use native tools before falling back to git. Never fight the harness.
 
 **Announce at start:** "I'm using the using-git-worktrees skill to set up an isolated workspace."
 
@@ -36,7 +36,20 @@ Report with branch state:
 - On a branch: "Already in isolated workspace at `<path>` on branch `<name>`."
 - Detached HEAD: "Already in isolated workspace at `<path>` (detached HEAD, externally managed). Branch creation needed at finish time."
 
-**If `GIT_DIR == GIT_COMMON` (or in a submodule):** You are in a normal repo checkout.
+**If `GIT_DIR == GIT_COMMON` (or in a submodule):** You are in a normal repo checkout. Before asking for consent or creating anything, apply the isolation gate.
+
+Create or offer a worktree only when at least one of these conditions applies:
+
+- the implementation is R3
+- parallel writers could change the same checkout
+- the work is long-lived and needs an isolated lifecycle
+- planned changes overlap paths already dirty in the working tree
+
+Inspect the actual working tree with `git status --short` and compare dirty paths with the planned edit scope. A dirty tree that does not overlap the task is not, by itself, a reason to isolate.
+
+R0/R1 and ordinary R2 work already in a safe clean checkout do not create a worktree by default. Work in place and skip to Step 2. An explicit user instruction to use a worktree still applies.
+
+When the isolation gate applies, continue with consent:
 
 Has the user already indicated their worktree preference in your instructions? If not, ask for consent before creating a worktree:
 
@@ -145,6 +158,8 @@ Ready to implement <feature-name>
 |-----------|--------|
 | Already in linked worktree | Skip creation (Step 0) |
 | In a submodule | Treat as normal repo (Step 0 guard) |
+| Safe clean R0/R1 or ordinary R2 | Work in place; skip creation |
+| R3, parallel writers, long-lived work, or dirty overlap | Request consent, then isolate |
 | Native worktree tool available | Use it (Step 1a) |
 | No native tool | Git worktree fallback (Step 1b) |
 | `.worktrees/` exists | Use it (verify ignored) |
@@ -168,6 +183,11 @@ Ready to implement <feature-name>
 - **Problem:** Creating a nested worktree inside an existing one
 - **Fix:** Always run Step 0 before creating anything
 
+### Isolating routine work by default
+
+- **Problem:** Creating worktrees for safe clean R0/R1 or ordinary R2 work adds branch and workspace overhead without a risk-based need
+- **Fix:** Apply the isolation gate first; create one for R3, parallel writers, long-lived work, dirty overlap, or explicit user direction
+
 ### Skipping ignore verification
 
 - **Problem:** Worktree contents get tracked, pollute git status
@@ -187,6 +207,7 @@ Ready to implement <feature-name>
 
 **Never:**
 - Create a worktree when Step 0 detects existing isolation
+- Create a worktree by default for safe clean R0/R1 or ordinary R2 work
 - Use `git worktree add` when you have a native worktree tool (e.g., `EnterWorktree`). This is the #1 mistake — if you have it, use it.
 - Skip Step 1a by jumping straight to Step 1b's git commands
 - Create worktree without verifying it's ignored (project-local)
@@ -195,6 +216,7 @@ Ready to implement <feature-name>
 
 **Always:**
 - Run Step 0 detection first
+- Apply the isolation gate before asking for consent or creating anything
 - Prefer native tools over git fallback
 - Follow directory priority: explicit instructions > existing project-local directory > default
 - Verify directory is ignored for project-local

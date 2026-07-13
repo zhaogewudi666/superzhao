@@ -232,13 +232,15 @@ Manual testing is ad-hoc. You think you tested everything but:
 
 Automated tests are systematic. They run the same way every time.
 
-**"Deleting X hours of work is wasteful"**
+**"Deleting X hours of new code for this change is wasteful"**
 
 Sunk cost fallacy. The time is already gone. Your choice now:
-- Delete and rewrite with TDD (X more hours, high confidence)
+- Delete the new production code written for this matching change before its
+  failing test and rewrite with TDD (X more hours, high confidence)
 - Keep it and add tests after (30 min, low confidence, likely bugs)
 
-The "waste" is keeping code you can't trust. Working code without real tests is technical debt.
+The "waste" is keeping new code for the current matching change that you can't
+trust. This does not authorize deleting pre-existing user code.
 
 **"TDD is dogmatic, being pragmatic means adapting"**
 
@@ -268,8 +270,8 @@ Tests-first force edge case discovery before implementing. Tests-after verify yo
 | "I'll test after" | Tests passing immediately prove nothing. |
 | "Tests after achieve same goals" | Tests-after = "what does this do?" Tests-first = "what should this do?" |
 | "Already manually tested" | Ad-hoc ≠ systematic. No record, can't re-run. |
-| "Deleting X hours is wasteful" | Sunk cost fallacy. Keeping unverified code is technical debt. |
-| "Keep as reference, write tests first" | You'll adapt it. That's testing after. Delete means delete. |
+| "Deleting X hours of new work is wasteful" | Sunk cost fallacy. Keeping newly written, unverified code for this matching change is technical debt. |
+| "Keep the new code as reference, write tests first" | You'll adapt it. That's testing after. Delete the new code and start the matching change test-first. |
 | "Need to explore first" | Fine. Throw away exploration, start with TDD. |
 | "Test hard = design unclear" | Listen to test. Hard to test = hard to use. |
 | "TDD will slow me down" | TDD faster than debugging. Pragmatic = test-first. |
@@ -278,7 +280,7 @@ Tests-first force edge case discovery before implementing. Tests-after verify yo
 
 ## Red Flags - STOP and Start Over
 
-- Code before test
+- New production code for the current matching change before its failing test
 - Test after implementation
 - Test passes immediately
 - Can't explain why test failed
@@ -287,12 +289,15 @@ Tests-first force edge case discovery before implementing. Tests-after verify yo
 - "I already manually tested it"
 - "Tests after achieve the same purpose"
 - "It's about spirit not ritual"
-- "Keep as reference" or "adapt existing code"
-- "Already spent X hours, deleting is wasteful"
+- "Keep new untested code as reference" or "adapt that new code while writing tests"
+- "Already spent X hours on this new code; deleting it is wasteful"
 - "TDD is dogmatic, I'm being pragmatic"
 - "This is different because..."
 
-**All of these mean: Delete code. Start over with TDD.**
+**For matching work, all of these mean: delete only the new production code
+written for the current change before its failing test, then start over with
+TDD. Never delete pre-existing user code merely because it predates this cycle;
+characterize its current behavior first where practical.**
 
 ## Example: Bug Fix
 

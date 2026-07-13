@@ -33,11 +33,16 @@ the risk of the change.
 
 ## How to Request
 
-**1. Get git SHAs:**
+**1. Record the complete review range:**
 ```bash
-BASE_SHA=$(git rev-parse HEAD~1)  # or origin/main
+BASE_SHA="$RECORDED_START_SHA"  # commit recorded before the reviewed change began
 HEAD_SHA=$(git rev-parse HEAD)
 ```
+
+For a whole-change integration review, use the merge base with the integration
+target as `BASE_SHA` (for example, `git merge-base origin/main "$HEAD_SHA"`).
+Do not infer the base from the number of commits; the review range must include
+the entire change.
 
 **2. Dispatch code reviewer subagent:**
 
@@ -68,7 +73,7 @@ substitute for the main agent's completion check.
 
 You: Let me request code review before proceeding.
 
-BASE_SHA=$(git log --oneline | grep "Task 1" | head -1 | awk '{print $1}')
+BASE_SHA=a7981ec  # recorded before Task 2 began
 HEAD_SHA=$(git rev-parse HEAD)
 
 [Dispatch code reviewer subagent]
@@ -82,9 +87,15 @@ HEAD_SHA=$(git rev-parse HEAD)
   Issues:
     Important: Missing progress indicators
     Minor: Magic number (100) for reporting interval
-  Assessment: Ready to proceed
+  Assessment: Needs fixes
 
-You: [Fix progress indicators]
+You: [Fix progress indicators and re-run the covering tests]
+[Dispatch code reviewer subagent for re-review]
+
+[Subagent returns]:
+  Issues: None
+  Assessment: Approved
+
 [Continue to Task 3]
 ```
 

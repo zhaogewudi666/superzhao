@@ -27,8 +27,8 @@ If you haven't run the verification command in this message, you cannot claim it
 BEFORE claiming any status or expressing satisfaction:
 
 1. IDENTIFY: What command proves this claim?
-2. RUN: Execute the FULL command (fresh, complete)
-3. READ: Full output, check exit code, count failures
+2. RUN: Execute the risk-appropriate command (fresh and complete for the exact claim)
+3. READ: Read the full output of the risk-appropriate command; check exit code, count failures
 4. VERIFY: Does output confirm the claim?
    - If NO: State actual status with evidence
    - If YES: State claim WITH evidence
@@ -45,12 +45,14 @@ Skip any step = lying, not verifying
 
 Risk scales verification breadth, never the requirement for fresh evidence.
 
+Evidence proves only the scope it exercised. A targeted R1 check or affected R2 suite can support its exact narrow claim, but cannot support "all tests pass" or any broader status. A claim about all tests requires the complete relevant test suite regardless of the task's baseline risk.
+
 ## Common Failures
 
 | Claim | Requires | Not Sufficient |
 |-------|----------|----------------|
-| Tests pass | Test command output: 0 failures | Previous run, "should pass" |
-| Linter clean | Linter output: 0 errors | Partial check, extrapolation |
+| Tests pass | Complete test scope named in the claim: 0 failures | A focused test when claiming all tests; previous run |
+| Linter clean | Risk-appropriate lint scope named in the claim: 0 errors | Output covering less than the claimed lint scope |
 | Build succeeds | Build command: exit 0 | Linter passing, logs look good |
 | Bug fixed | Test original symptom: passes | Code changed, assumed fixed |
 | Regression test works | Red-green cycle verified | Test passes once |
@@ -63,7 +65,7 @@ Risk scales verification breadth, never the requirement for fresh evidence.
 - Expressing satisfaction before verification ("Great!", "Perfect!", "Done!", etc.)
 - About to commit/push/PR without verification
 - Trusting agent success reports
-- Relying on partial verification
+- Relying on evidence narrower than the risk level or exact claim
 - Thinking "just this once"
 - Tired and wanting work over
 - **ANY wording implying success without having run verification**
@@ -78,7 +80,7 @@ Risk scales verification breadth, never the requirement for fresh evidence.
 | "Linter passed" | Linter ≠ compiler |
 | "Agent said success" | Verify independently |
 | "I'm tired" | Exhaustion ≠ excuse |
-| "Partial check is enough" | Partial proves nothing |
+| "A narrower check is enough" | Only when it is the risk-appropriate proof for the exact narrow claim; never extrapolate it to all tests or broader status |
 | "Different words so rule doesn't apply" | Spirit over letter |
 
 ## Key Patterns
@@ -86,6 +88,8 @@ Risk scales verification breadth, never the requirement for fresh evidence.
 **Tests:**
 ```
 ✅ [Run test command] [See: 34/34 pass] "All tests pass"
+✅ [Run targeted R1 check] [See: pass] "The requested artifact changed correctly"
+❌ [Run one focused test] "All tests pass"
 ❌ "Should pass now" / "Looks correct"
 ```
 

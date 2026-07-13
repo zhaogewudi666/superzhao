@@ -9,7 +9,7 @@ description: Use when the task created or managed a branch/worktree, or when the
 
 Guide completion of development work by presenting clear options and handling chosen workflow.
 
-**Core principle:** Confirm task ownership or an explicit finishing request → Verify tests → Detect the actual environment → Present options only for task-managed work → Execute choice → Clean up.
+**Core principle:** Confirm task ownership or an explicit finishing request → Verify tests → Detect the actual environment → Present options only for task-managed work → Map the selection to a named action → Execute → Clean up.
 
 **Announce at start:** "I'm using the finishing-a-development-branch skill to complete this work."
 
@@ -92,6 +92,13 @@ Implementation complete. What would you like to do?
 Which option?
 ```
 
+Map the response immediately, before execution:
+
+- `1` → `merge`
+- `2` → `publish_pr`
+- `3` → `keep`
+- `4` → `discard`
+
 **Detached HEAD — present exactly these 3 options:**
 
 ```
@@ -104,11 +111,21 @@ Implementation complete. You're on a detached HEAD (externally managed workspace
 Which option?
 ```
 
+Map the response immediately, before execution:
+
+- `1` → `publish_pr`
+- `2` → `keep`
+- `3` → `discard`
+
 **Don't add explanation** - keep options concise.
 
-### Step 5: Execute Choice
+### Step 5: Execute the Named Action
 
-#### Option 1: Merge Locally
+Normalize an explicitly requested finishing action to the same names. Never carry a bare menu number into this step.
+
+#### `merge`
+
+This action is available only from the standard menu or an explicit merge request in a named-branch environment.
 
 ```bash
 # Get main repo root for CWD safety
@@ -132,22 +149,58 @@ Then: Cleanup worktree (Step 6), then delete branch:
 git branch -d <feature-branch>
 ```
 
-#### Option 2: Push and Create PR
+#### `publish_pr`
+
+Push without force. A push alone does not complete this action.
+
+On a named branch:
 
 ```bash
-# Push branch
 git push -u origin <feature-branch>
 ```
 
-**Do NOT clean up worktree** — user needs it alive to iterate on PR feedback.
+On detached HEAD, select and report an explicit, non-conflicting `<new-branch>` name. Check the remote before publishing; if the name already exists, stop and choose another rather than overwriting it:
 
-#### Option 3: Keep As-Is
+```bash
+git ls-remote --heads origin refs/heads/<new-branch>
+```
+
+Use the actual permissions available in the workspace:
+
+- If local branch creation succeeds, create the branch and push it normally:
+  ```bash
+  git switch -c <new-branch>
+  git push -u origin <new-branch>
+  ```
+- If the host rejects local ref creation but permits remote publication, push the detached commit explicitly:
+  ```bash
+  git push origin HEAD:refs/heads/<new-branch>
+  ```
+
+Never force-push either path. Verify the remote branch exists:
+
+```bash
+git ls-remote --exit-code --heads origin refs/heads/<remote-branch>
+```
+
+Then create the pull request. Use an available platform or GitHub PR-creation tool and verify the returned PR with its corresponding read tool. If no such tool is available, use GitHub CLI:
+
+```bash
+CREATED_PR_URL=$(gh pr create --base <base-branch> --head <remote-branch> --fill)
+VERIFIED_PR_URL=$(gh pr view "$CREATED_PR_URL" --json url --jq '.url')
+```
+
+For a fork, use the actual `<owner>:<remote-branch>` value required by `--head`. Report `VERIFIED_PR_URL`. If creation or verification fails, report the exact blocker and preserve the branch/worktree for retry.
+
+**Do NOT clean up the branch or worktree** — the user needs both for PR feedback.
+
+#### `keep`
 
 Report: "Keeping branch <name>. Worktree preserved at <path>."
 
 **Don't cleanup worktree.**
 
-#### Option 4: Discard
+#### `discard`
 
 **Confirm first:**
 ```
@@ -161,20 +214,24 @@ Type 'discard' to confirm.
 
 Wait for exact confirmation.
 
-If confirmed:
+If confirmed on a named branch:
 ```bash
 MAIN_ROOT=$(git -C "$(git rev-parse --git-common-dir)/.." rev-parse --show-toplevel)
 cd "$MAIN_ROOT"
 ```
 
-Then: Cleanup worktree (Step 6), then force-delete branch:
+Then: Cleanup the task-owned worktree (Step 6), then force-delete the task branch:
 ```bash
 git branch -D <feature-branch>
 ```
 
+For detached HEAD in a harness-owned workspace, use the host's explicit discard/exit control if available. Otherwise preserve the workspace and report that automatic deletion is unavailable; do not delete unrelated refs or harness-owned state.
+
 ### Step 6: Cleanup Workspace
 
-**Only runs for Options 1 and 4.** Options 2 and 3 always preserve the worktree.
+Cleanup is eligible only for `merge` and confirmed `discard`. The `publish_pr` and `keep` actions always preserve the branch and worktree.
+
+Use the actual values captured in Step 2. If they need refreshing, do so while still inside the task workspace and before changing directories; do not overwrite them after moving to the main checkout:
 
 ```bash
 GIT_DIR=$(cd "$(git rev-parse --git-dir)" 2>/dev/null && pwd -P)
@@ -203,12 +260,12 @@ git worktree prune  # Self-healing: clean up any stale registrations
 | User requested a specific finishing action | Verify, detect, then execute that action without a menu |
 | Neither condition applies | Stop; do not present a finishing menu |
 
-| Option | Merge | Push | Keep Worktree | Cleanup Branch |
-|--------|-------|------|---------------|----------------|
-| 1. Merge locally | yes | - | - | yes |
-| 2. Create PR | - | yes | yes | - |
-| 3. Keep as-is | - | - | yes | - |
-| 4. Discard | - | - | - | yes (force) |
+| Named action | Result | Branch/worktree handling |
+|--------------|--------|--------------------------|
+| `merge` | Merge locally and re-test | Clean up only task-owned worktree/branch after success |
+| `publish_pr` | Push, create PR, verify and report URL | Preserve branch and worktree |
+| `keep` | Leave work as-is | Preserve branch and worktree |
+| `discard` | Permanently discard after exact confirmation | Clean up only task-owned state; never remove harness-owned state |
 
 ## Common Mistakes
 
@@ -224,9 +281,13 @@ git worktree prune  # Self-healing: clean up any stale registrations
 - **Problem:** Routine work in an existing checkout triggers an irrelevant merge, PR, keep, or discard decision
 - **Fix:** Confirm this task created or managed the branch/worktree before presenting any menu
 
-**Cleaning up worktree for Option 2**
+**Cleaning up after `publish_pr`**
 - **Problem:** Remove worktree user needs for PR iteration
-- **Fix:** Only cleanup for Options 1 and 4
+- **Fix:** Preserve the branch/worktree for `publish_pr` and `keep`; cleanup is only eligible for `merge` and confirmed `discard`
+
+**Stopping after push**
+- **Problem:** Reports publication complete without creating or verifying the pull request
+- **Fix:** Create the PR, verify it through a read operation, and report its URL
 
 **Deleting branch before removing worktree**
 - **Problem:** `git branch -d` fails because worktree still references the branch
@@ -260,7 +321,8 @@ git worktree prune  # Self-healing: clean up any stale registrations
 - Verify tests before offering options
 - Detect the actual current environment before presenting a menu or executing a requested action
 - For a task-managed branch/worktree, present exactly 4 options (or 3 for detached HEAD)
-- Get typed confirmation for Option 4
-- Clean up worktree for Options 1 & 4 only
+- Map menu numbers to named actions before execution
+- Get typed confirmation before `discard`
+- Clean up task-owned worktree state only for `merge` and confirmed `discard`
 - `cd` to main repo root before worktree removal
 - Run `git worktree prune` after removal

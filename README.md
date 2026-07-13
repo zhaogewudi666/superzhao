@@ -1,4 +1,72 @@
-> **Superzhao Codex Profile** — This repository is a risk-tiered Codex distribution based on [obra/superpowers](https://github.com/obra/superpowers). It preserves the upstream R3 workflow for consequential work and uses proportional R0–R2 workflows for everyday Codex tasks. See [maintenance and installation](docs/superzhao-maintenance.md).
+# Superzhao
+
+Superzhao 是面向 Codex 的风险分级开发工作流，基于
+[obra/superpowers](https://github.com/obra/superpowers) 维护。它不是对上游项目的完整品牌重命名，
+而是在尽量保持上游技能和生态兼容的前提下，调整 Codex 的任务路由、执行门槛、验证策略和本地部署流程。
+
+项目仓库：<https://github.com/zhaogewudi666/superzhao>
+
+## 项目定位
+
+- **R0（只读任务）**：直接检查并提供证据，不引入不必要的实现流程。
+- **R1（局部、可逆修改）**：直接修改，检查差异并进行针对性验证。
+- **R2（行为、接口或多文件修改）**：按需使用调试、测试驱动、计划和代码审查。
+- **R3（安全、迁移、生产操作或外部副作用）**：保留上游严格的设计审批、隔离、测试、审查、验证与回滚要求。
+
+Superzhao 的目标是让日常任务保持轻量，同时不削弱高风险工作的安全边界。主要定制内容包括：
+
+- Codex 专用的 R0–R3 风险路由规则；
+- 按风险等级缩放 brainstorming、TDD、子代理、worktree 和验证流程；
+- 安全、可回滚的 Codex 技能配置安装脚本；
+- 与上游 Superpowers 同步时所需的检查和维护说明。
+
+## 名称与兼容性
+
+**Superzhao 是本发行版名称，核心启动技能仍保留 `using-superpowers` 名称。**
+
+保留该名称以及部分 `Superpowers` 路径、清单字段和文档，是为了兼容上游技能发现、自动触发、插件集成和后续同步。
+因此，看到 `skills/using-superpowers/`、`.superpowers/` 或上游品牌内容并不代表 Superzhao 配置尚未生效；
+实际行为以本仓库中的风险路由和技能内容为准。
+
+## Codex 安装
+
+从已经审核并准备启用的提交执行：
+
+```bash
+bash scripts/install-codex-profile.sh
+```
+
+安装器会备份当前受管技能，再将本仓库中的 Superzhao 技能配置安装到 `${CODEX_HOME:-$HOME/.codex}`。
+安装完成后需要新建 Codex 任务，使技能发现重新加载。需要回滚时执行：
+
+```bash
+bash scripts/rollback-codex-profile.sh
+```
+
+完整的安装、安全边界、上游同步和恢复说明见
+[Superzhao maintenance and installation](docs/superzhao-maintenance.md)。
+
+## 仓库维护
+
+本仓库采用以下远端约定：
+
+- `origin`：`zhaogewudi666/superzhao`，用于日常维护和推送；
+- `upstream`：`obra/superpowers`，仅作为上游更新来源。
+
+上游更新需要在独立分支中合并，并重新检查完整的 fork 差异。合并后至少运行：
+
+```bash
+bash tests/codex-profile/run-tests.sh
+bash tests/shell-lint/test-lint-shell.sh
+git diff --check upstream/main...HEAD
+```
+
+## 上游 Superpowers 文档
+
+以下内容保留自上游项目，用于说明原始技能体系以及其他开发工具的集成方式。其中指向
+`obra/superpowers` 的安装命令安装的是上游版本，不是本仓库的 Superzhao Codex 配置。
+
+---
 
 # Superpowers
 

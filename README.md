@@ -1,3 +1,5 @@
+> **Superzhao Codex Profile** — This repository is a risk-tiered Codex distribution based on [obra/superpowers](https://github.com/obra/superpowers). It preserves the upstream R3 workflow for consequential work and uses proportional R0–R2 workflows for everyday Codex tasks. See [maintenance and installation](docs/superzhao-maintenance.md).
+
 # Superpowers
 
 Superpowers is a complete software development methodology for your coding agents, built on top of a set of composable skills and some initial instructions that make sure your agent uses them.

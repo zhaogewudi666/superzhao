@@ -24,7 +24,7 @@ Write a plan for R3 work and for R2 work with at least three dependent steps or 
 
 ## Scope Check
 
-If the approved requirements (a written spec for R3 or an approved brief or inline design for R2) cover multiple independent subsystems, they should have been broken into sub-projects during brainstorming. If they weren't, suggest separate plans — one per subsystem. Each plan should produce working, testable software on its own.
+If the source requirements (an approved written spec for R3 or a brief or inline design for R2) cover multiple independent subsystems, they should have been broken into sub-projects during brainstorming. If they weren't, suggest separate plans — one per subsystem. Each plan should produce working, testable software on its own.
 
 ## File Structure
 
@@ -130,7 +130,7 @@ Every task must contain the actual content an engineer needs. These are **plan f
 
 ## Self-Review
 
-After writing the complete plan, look at the source requirements with fresh eyes and check the plan against them. For R3, the source is the approved written spec; for R2, it may be the approved brief or inline design. This is a checklist you run yourself — not a subagent dispatch.
+After writing the complete plan, look at the source requirements with fresh eyes and check the plan against them. For R3, the source is the approved written spec; for R2, it may be a brief or inline design. This is a checklist you run yourself — not a subagent dispatch.
 
 **1. Requirements coverage:** Skim each source requirement. Can you point to a task that implements it? List any gaps.
 

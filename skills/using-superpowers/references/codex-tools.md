@@ -1,39 +1,25 @@
-## Subagent dispatch requires multi-agent support
+# Codex Tools
 
-Add to your Codex config (`~/.codex/config.toml`):
+## Collaboration
 
-```toml
-[features]
-multi_agent = true
-```
+When collaboration tools are available, dispatch with `spawn_agent(task_name, message, fork_turns)`. Always choose `fork_turns` deliberately:
 
-This enables `spawn_agent`, `wait_agent`, and `close_agent` for skills like `dispatching-parallel-agents` and `subagent-driven-development`. When using subagent-driven-development, you should always close implementer and reviewer subagents when they have finished all their work.
+- `none` for isolated validation and narrowly scoped work with a self-contained prompt.
+- a small numeric window when recent conversation context is required.
+- `all` only when the subagent truly needs the full session.
+
+Use `followup_task` for another turn on an existing agent, `send_message` for non-triggering context, `wait_agent` for mailbox updates, and `interrupt_agent` only to interrupt active work. Do not invent model, agent-type, or cleanup parameters absent from the current schema.
 
 ## Environment Detection
 
-Skills that create worktrees or finish branches should detect their
-environment with read-only git commands before proceeding:
+Inspect `git rev-parse --git-dir`, `git rev-parse --git-common-dir`, `git branch --show-current`, remotes, authentication, and actual permissions before choosing worktree or publish behavior. Detached HEAD is a state to handle, not proof that branch, push, or PR operations are impossible.
 
-```bash
-GIT_DIR=$(cd "$(git rev-parse --git-dir)" 2>/dev/null && pwd -P)
-GIT_COMMON=$(cd "$(git rev-parse --git-common-dir)" 2>/dev/null && pwd -P)
-BRANCH=$(git branch --show-current)
-```
-
-- `GIT_DIR != GIT_COMMON` → already in a linked worktree (skip creation)
-- `BRANCH` empty → detached HEAD (cannot branch/push/PR from sandbox)
-
-See `using-git-worktrees` Step 0 and `finishing-a-development-branch`
-Step 1 for how each skill uses these signals.
+Prefer native isolation when the runtime exposes it; otherwise use the guarded Git fallback from `using-git-worktrees`.
 
 ## Codex App Finishing
 
-When the sandbox blocks branch/push operations (detached HEAD in an
-externally managed worktree), the agent commits all work and informs
-the user to use the App's native controls:
+Use available Codex App controls when they are relevant. If branch or publish commands fail, report the observed restriction and the safe next action; do not assume a sandbox restriction before testing it.
 
-- **"Create branch"** — names the branch, then commit/push/PR via App UI
-- **"Hand off to local"** — transfers work to the user's local checkout
+## Visual Companion
 
-The agent can still run tests, stage files, and output suggested branch
-names, commit messages, and PR descriptions for the user to copy.
+The brainstorming visual companion is a bundled local server workflow, not a native Codex tool. Offer it only when the visual decision benefits from it and follow the skill's consent rule.

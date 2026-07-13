@@ -1,25 +1,35 @@
 ---
 name: requesting-code-review
-description: Use when completing tasks, implementing major features, or before merging to verify work meets requirements
+description: Use for material R2 logic before integration, at meaningful R3 task boundaries, before merging, or when the user explicitly requests independent code review
 ---
 
 # Requesting Code Review
 
-Dispatch a code reviewer subagent to catch issues before they cascade. The reviewer gets precisely crafted context for evaluation — never your session's history. This keeps the reviewer focused on the work product, not your thought process, and preserves your own context for continued work.
+Dispatch an independent code reviewer at risk-appropriate gates. Give the reviewer
+the requirements and review artifacts it needs plus an explicit conversation
+window, keeping it focused on the work product rather than your reasoning history.
 
-**Core principle:** Review early, review often.
+**Core principle:** Independent review is strongest when its timing and scope match
+the risk of the change.
+
+## Review Gate
+
+- R1: no implementation-time review subagent by default; inspect the diff and run
+  targeted validation directly.
+- R2: use one final independent review before integrating material logic.
+- R3: review at meaningful task boundaries, fix Critical and Important findings,
+  and run one whole-change review before integration.
+- A pending merge or explicit user request requires review regardless of the
+  default above.
 
 ## When to Request Review
 
 **Mandatory:**
-- After each task in subagent-driven development
-- After completing major feature
-- Before merge to main
-
-**Optional but valuable:**
-- When stuck (fresh perspective)
-- Before refactoring (baseline check)
-- After fixing complex bug
+- For material R2 logic, once after implementation and before integration
+- At meaningful R3 task boundaries selected by subagent-driven development
+- For the complete R3 change after all task-boundary reviews
+- Before merging
+- When the user explicitly requests independent code review
 
 ## How to Request
 
@@ -31,7 +41,8 @@ HEAD_SHA=$(git rev-parse HEAD)
 
 **2. Dispatch code reviewer subagent:**
 
-Dispatch a `general-purpose` subagent, filling the template at [code-reviewer.md](code-reviewer.md)
+Dispatch a subagent, choose `fork_turns` explicitly, and fill the capability-neutral
+template at [code-reviewer.md](code-reviewer.md).
 
 **Placeholders:**
 - `{DESCRIPTION}` - Brief summary of what you built
@@ -43,7 +54,12 @@ Dispatch a `general-purpose` subagent, filling the template at [code-reviewer.md
 - Fix Critical issues immediately
 - Fix Important issues before proceeding
 - Note Minor issues for later
-- Push back if reviewer is wrong (with reasoning)
+- Re-review after Critical or Important fixes
+- Push back only with concrete code, requirement, or test evidence when the reviewer is wrong
+
+The main agent must inspect the cited code and validation evidence before accepting
+either a finding or a rebuttal. A reviewer verdict is evidence to evaluate, not a
+substitute for the main agent's completion check.
 
 ## Example
 
@@ -75,28 +91,26 @@ You: [Fix progress indicators]
 ## Integration with Workflows
 
 **Subagent-Driven Development:**
-- Review after EACH task
-- Catch issues before they compound
-- Fix before moving to next task
+- For R3, review at each meaningful task boundary and once across the whole change
+- For R2, use task isolation only when it materially improves reliability; otherwise review once at the end
+- Fix Critical and Important issues before moving past the gate
 
 **Executing Plans:**
-- Review after each task or at natural checkpoints
-- Get feedback, apply, continue
+- Apply the same R1/R2/R3 review gate at natural checkpoints
 
 **Ad-Hoc Development:**
-- Review before merge
-- Review when stuck
+- Review before merge or when the user explicitly requests it
 
 ## Red Flags
 
 **Never:**
-- Skip review because "it's simple"
+- Skip a review required by the risk gate, a pending merge, or the user
 - Ignore Critical issues
 - Proceed with unfixed Important issues
 - Argue with valid technical feedback
 
 **If reviewer wrong:**
-- Push back with technical reasoning
+- Push back with technical reasoning tied to the requirement
 - Show code/tests that prove it works
 - Request clarification
 

@@ -1,15 +1,32 @@
 ---
 name: subagent-driven-development
-description: Use when executing implementation plans with independent tasks in the current session
+description: Use when executing an approved high-risk plan (R3) or a multi-task implementation whose isolated task contexts and independent reviews materially improve reliability
 ---
 
 # Subagent-Driven Development
 
-Execute plan by dispatching a fresh implementer subagent per task, a task review (spec compliance + code quality) after each, and a broad whole-branch review at the end.
+Execute an approved high-risk plan at meaningful task boundaries with fresh
+implementers, skeptical task review, and a broad whole-change review.
 
-**Why subagents:** You delegate tasks to specialized agents with isolated context. By precisely crafting their instructions and context, you ensure they stay focused and succeed at their task. They should never inherit your session's context or history — you construct exactly what they need. This also preserves your own context for coordination work.
+**Why subagents:** Isolated task contexts and independent review can materially
+improve reliability on high-risk or naturally separable work. Give each subagent
+the task brief, referenced files, and only the deliberately selected conversation
+window it needs. This also preserves your own context for coordination work.
 
-**Core principle:** Fresh subagent per task + task review (spec + quality) + broad final review = high quality, fast iteration
+**Core principle:** Scale delegation and review to risk; when task-by-task SDD is
+warranted, use fresh context + skeptical review + controller evidence checks.
+
+## Execution Gate
+
+- R1: implement directly; no implementation or review subagent by default.
+- R2: implement directly and use one final independent review for material logic unless task isolation clearly improves reliability.
+- R3: use fresh implementers and task review at meaningful task boundaries, then one whole-change review.
+
+Every `spawn_agent` call must choose `fork_turns` explicitly. Do not require unavailable model, named agent-type, or cleanup parameters.
+
+Choose `fork_turns: "none"` when the brief and referenced files are sufficient,
+the smallest positive integer string when a recent conversation window is needed,
+and `fork_turns: "all"` only when the full session is genuinely required.
 
 **Narration:** between tool calls, narrate at most one short line — the
 ledger and the tool results carry the record.
@@ -18,38 +35,32 @@ ledger and the tool results carry the record.
 
 ## When to Use
 
-```dot
-digraph when_to_use {
-    "Have implementation plan?" [shape=diamond];
-    "Tasks mostly independent?" [shape=diamond];
-    "Stay in this session?" [shape=diamond];
-    "subagent-driven-development" [shape=box];
-    "executing-plans" [shape=box];
-    "Manual execution or brainstorm first" [shape=box];
+Use this task-by-task workflow when either condition is observable:
 
-    "Have implementation plan?" -> "Tasks mostly independent?" [label="yes"];
-    "Have implementation plan?" -> "Manual execution or brainstorm first" [label="no"];
-    "Tasks mostly independent?" -> "Stay in this session?" [label="yes"];
-    "Tasks mostly independent?" -> "Manual execution or brainstorm first" [label="no - tightly coupled"];
-    "Stay in this session?" -> "subagent-driven-development" [label="yes"];
-    "Stay in this session?" -> "executing-plans" [label="no - parallel session"];
-}
-```
+- an approved R3 plan has meaningful task boundaries
+- a multi-task implementation will be materially more reliable when isolated
+  contexts and independent task reviews contain mistakes before they compound
+
+For R1, implement directly. For ordinary R2 work, implement directly and request
+one final independent review for material logic. If work will continue in a
+separate session rather than the current one, use executing-plans instead.
 
 **vs. Executing Plans (parallel session):**
 - Same session (no context switch)
 - Fresh subagent per task (no context pollution)
-- Review after each task (spec compliance + code quality), broad review at the end
+- Review at each meaningful task boundary (spec compliance + code quality), broad review at the end
 - Faster iteration (no human-in-loop between tasks)
 
 ## The Process
+
+The process below applies only after the Execution Gate selects task-by-task SDD.
 
 ```dot
 digraph process {
     rankdir=TB;
 
     subgraph cluster_per_task {
-        label="Per Task";
+        label="Per Meaningful Task Boundary";
         "Dispatch implementer subagent (./implementer-prompt.md)" [shape=box];
         "Implementer subagent asks questions?" [shape=diamond];
         "Answer questions, provide context" [shape=box];
@@ -96,39 +107,6 @@ before execution begins, not one interrupt per discovery mid-plan. If the
 scan is clean, proceed without comment. The review loop remains the net for
 conflicts that only emerge from implementation.
 
-## Model Selection
-
-Use the least powerful model that can handle each role to conserve cost and increase speed.
-
-**Mechanical implementation tasks** (isolated functions, clear specs, 1-2 files): use a fast, cheap model. Most implementation tasks are mechanical when the plan is well-specified.
-
-**Integration and judgment tasks** (multi-file coordination, pattern matching, debugging): use a standard model.
-
-**Architecture and design tasks**: use the most capable available model.
-The final whole-branch review is one of these — dispatch it on the most
-capable available model, not the session default.
-
-**Review tasks**: choose the model with the same judgment, scaled to the
-diff's size, complexity, and risk. A small mechanical diff does not need the
-most capable model; a subtle concurrency change does.
-
-**Always specify the model explicitly when dispatching a subagent.** An
-omitted model inherits your session's model — often the most capable and
-most expensive — which silently defeats this section.
-
-**Turn count beats token price.** Wall-clock and context cost scale with how
-many turns a subagent takes, and the cheapest models routinely take 2-3× the
-turns on multi-step work — costing more overall. Use a mid-tier model as the
-floor for reviewers and for implementers working from prose descriptions.
-When the task's plan text contains the complete code to write, the
-implementation is transcription plus testing: use the cheapest tier for
-that implementer. Single-file mechanical fixes also take the cheapest tier.
-
-**Task complexity signals (implementation tasks):**
-- Touches 1-2 files with a complete spec → cheap model
-- Touches multiple files with integration concerns → standard model
-- Requires design judgment or broad codebase understanding → most capable model
-
 ## Handling Implementer Status
 
 Implementer subagents report one of four statuses. Handle each appropriately:
@@ -140,12 +118,14 @@ Implementer subagents report one of four statuses. Handle each appropriately:
 **NEEDS_CONTEXT:** The implementer needs information that wasn't provided. Provide the missing context and re-dispatch.
 
 **BLOCKED:** The implementer cannot complete the task. Assess the blocker:
-1. If it's a context problem, provide more context and re-dispatch with the same model
-2. If the task requires more reasoning, re-dispatch with a more capable model
-3. If the task is too large, break it into smaller pieces
+1. If it's a context problem, provide the missing referenced context and re-dispatch
+2. If the task is too large, break it into smaller pieces
+3. If the brief is ambiguous, resolve the ambiguity or escalate to the human
 4. If the plan itself is wrong, escalate to the human
 
-**Never** ignore an escalation or force the same model to retry without changes. If the implementer said it's stuck, something needs to change.
+**Never** ignore an escalation or repeat the same attempt without changing its
+context, boundaries, or instructions. If the implementer said it's stuck,
+something needs to change.
 
 ## Handling Reviewer ⚠️ Items
 
@@ -155,6 +135,23 @@ review, but you must resolve each one yourself before marking the task
 complete: you hold the plan and cross-task context the reviewer
 lacks. If you confirm an item is a real gap, treat it as a failed spec
 review — send it back to the implementer and re-review.
+
+## Controller Evidence Gate
+
+The main agent owns completion. Before dispatching task review, independently:
+
+- inspect the task's commit range and working-tree status to confirm the change
+  stayed within the brief
+- read the implementer report and confirm it names the commands, results, and
+  files changed
+- when TDD applies, require RED and GREEN commands, relevant output, and the
+  expected reason for the RED failure
+- when TDD does not apply, require the reason a failing automated test was not
+  practical plus the best available deterministic validation and its result
+
+After review, verify every Critical and Important finding is either fixed and
+re-reviewed or rebutted with concrete code/test evidence. A subagent report is
+input to this gate, never proof by itself.
 
 ## Constructing Reviewer Prompts
 
@@ -335,7 +332,7 @@ Done!
 ## Advantages
 
 **vs. Manual execution:**
-- Subagents follow TDD naturally
+- Implementer reports carry explicit TDD or alternative-validation evidence
 - Fresh context per task (no confusion)
 - Parallel-safe (subagents don't interfere)
 - Subagent can ask questions (before AND during work)
@@ -412,7 +409,7 @@ Done!
 - **superpowers:finishing-a-development-branch** - Complete development after all tasks
 
 **Subagents should use:**
-- **superpowers:test-driven-development** - Subagents follow TDD for each task
+- **superpowers:test-driven-development** - Subagents follow strict TDD when its trigger matches; otherwise they document deterministic alternative validation
 
 **Alternative workflow:**
 - **superpowers:executing-plans** - Use for parallel session instead of same-session execution

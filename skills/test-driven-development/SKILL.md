@@ -1,6 +1,6 @@
 ---
 name: test-driven-development
-description: Use when implementing any feature or bugfix, before writing implementation code
+description: Use before changing observable behavior, fixing a reproducible bug, modifying a public contract, or implementing security- or data-sensitive logic when an automated test surface is available
 ---
 
 # Test-Driven Development (TDD)
@@ -15,28 +15,35 @@ Write the test first. Watch it fail. Write minimal code to pass.
 
 ## When to Use
 
-**Always:**
-- New features
-- Bug fixes
-- Refactoring
-- Behavior changes
+Use strict RED-GREEN-REFACTOR before:
+- changing observable behavior
+- fixing a reproducible bug
+- modifying a public contract
+- implementing security- or data-sensitive logic
 
-**Exceptions (ask your human partner):**
-- Throwaway prototypes
-- Generated code
-- Configuration files
+when an automated test surface is available. Matching work remains test-first
+even when the change looks small or the surrounding code lacks tests.
 
 Thinking "skip TDD just this once"? Stop. That's rationalization.
 
+## When Test-First Does Not Apply
+
+Copy, comments, generated artifacts, throwaway exploration, and configuration without a practical automated-test surface may use the best available deterministic validation. State why a failing automated test is not practical and run that validation before claiming completion.
+
+Do not delete pre-existing user code because it predates the current test cycle. Before changing its observable behavior, add a failing regression or characterization test where practical.
+
 ## The Iron Law
+
+For matching work with a practical automated-test surface:
 
 ```
 NO PRODUCTION CODE WITHOUT A FAILING TEST FIRST
 ```
 
-Write code before the test? Delete it. Start over.
+Write new code for the current change before the test? Delete that new work.
+Start over. This deletion rule does not apply to pre-existing user code.
 
-**No exceptions:**
+**No exceptions for matching work:**
 - Don't keep it as "reference"
 - Don't "adapt" it while writing tests
 - Don't look at it
@@ -326,7 +333,7 @@ Extract validation for multiple fields if needed.
 
 ## Verification Checklist
 
-Before marking work complete:
+Before marking matching work complete:
 
 - [ ] Every new function/method has a test
 - [ ] Watched each test fail before implementing
@@ -352,7 +359,7 @@ Can't check all boxes? You skipped TDD. Start over.
 
 Bug found? Write failing test reproducing it. Follow TDD cycle. Test proves fix and prevents regression.
 
-Never fix bugs without a test.
+When the trigger matches and an automated test surface is available, never fix bugs without a test.
 
 ## Testing Anti-Patterns
 
@@ -368,4 +375,4 @@ Production code → test exists and failed first
 Otherwise → not TDD
 ```
 
-No exceptions without your human partner's permission.
+For matching work with a practical automated-test surface, there are no exceptions without your human partner's permission.

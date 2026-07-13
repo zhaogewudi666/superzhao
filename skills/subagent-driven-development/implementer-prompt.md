@@ -3,11 +3,10 @@
 Use this template when dispatching an implementer subagent.
 
 ```
-Subagent (general-purpose):
-  description: "Implement Task N: [task name]"
-  model: [MODEL — REQUIRED: choose per SKILL.md Model Selection; an omitted
-         model silently inherits the session's most expensive one]
-  prompt: |
+Dispatch a subagent:
+  task_name: "implement_task_n"
+  fork_turns: [FORK_TURNS — REQUIRED: choose "none", a positive integer string, or "all" explicitly]
+  message: |
     You are implementing Task N: [task name]
 
     ## Task Description
@@ -18,6 +17,8 @@ Subagent (general-purpose):
     ## Context
 
     [Scene-setting: where this fits, dependencies, architectural context]
+
+    **Context policy:** Use only the task brief, referenced files, and the explicitly provided conversation window. Report when required context is missing rather than assuming it.
 
     ## Before You Begin
 
@@ -33,11 +34,16 @@ Subagent (general-purpose):
 
     Once you're clear on requirements:
     1. Implement exactly what the task specifies
-    2. Write tests (following TDD if task says to)
-    3. Verify implementation works
-    4. Commit your work
-    5. Self-review (see below)
-    6. Report back
+    2. When the task changes observable behavior, fixes a reproducible bug,
+       modifies a public contract, or implements security- or data-sensitive
+       logic and an automated test surface is available, follow strict
+       RED-GREEN-REFACTOR
+    3. Outside that trigger, state why a failing automated test is not practical
+       and run the best available deterministic validation
+    4. Verify implementation works
+    5. Commit your work
+    6. Self-review (see below)
+    7. Report back
 
     Work from: [directory]
 
@@ -74,8 +80,8 @@ Subagent (general-purpose):
 
     **How to escalate:** Report back with status BLOCKED or NEEDS_CONTEXT. Describe
     specifically what you're stuck on, what you've tried, and what kind of help you need.
-    The controller can provide more context, re-dispatch with a more capable model,
-    or break the task into smaller pieces.
+    The controller can provide the missing context, resolve an ambiguity, or break
+    the task into smaller pieces.
 
     ## Before Reporting Back: Self-Review
 
@@ -98,7 +104,9 @@ Subagent (general-purpose):
 
     **Testing:**
     - Do tests actually verify behavior (not just mock behavior)?
-    - Did I follow TDD if required?
+    - Did I follow strict RED-GREEN-REFACTOR whenever the TDD trigger matched?
+    - If the trigger did not match, did I record why a failing automated test was
+      not practical and run deterministic alternative validation?
     - Are tests comprehensive?
     - Is the test output pristine (no stray warnings or noise)?
 
@@ -115,9 +123,13 @@ Subagent (general-purpose):
     Write your full report to [REPORT_FILE]:
     - What you implemented (or what you attempted, if blocked)
     - What you tested and test results
-    - **TDD Evidence** (if TDD was required for this task):
-      - RED: command run, relevant failing output before implementation, and why the failure was expected
-      - GREEN: command run and relevant passing output after implementation
+    - **Validation Evidence**:
+      - If TDD applies, RED and GREEN evidence is mandatory:
+        - RED: command run, relevant failing output before implementation, and why the failure was expected
+        - GREEN: command run and relevant passing output after implementation
+      - If TDD does not apply, alternative-validation evidence is mandatory:
+        - Why a failing automated test was not practical
+        - Deterministic validation: command or procedure run and relevant passing result
     - Files changed
     - Self-review findings (if any)
     - Any issues or concerns

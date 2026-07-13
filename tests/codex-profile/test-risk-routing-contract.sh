@@ -52,6 +52,27 @@ reject_text() {
   fi
 }
 
+require_before() {
+  local file="$1" first_pattern="$2" second_pattern="$3" label="$4"
+  local path="$ROOT/$file"
+  local first_line
+  local second_line
+
+  if [[ ! -f "$path" || ! -r "$path" ]]; then
+    printf 'FAIL: %s (target is not a readable regular file: %s)\n' "$label" "$file" >&2
+    failures=$((failures + 1))
+    return
+  fi
+
+  first_line="$(grep -En "$first_pattern" "$path" | sed -n '1s/:.*//p' || true)"
+  second_line="$(grep -En "$second_pattern" "$path" | sed -n '1s/:.*//p' || true)"
+  if [[ -z "$first_line" || -z "$second_line" \
+    || "$first_line" -ge "$second_line" ]]; then
+    printf 'FAIL: %s\n' "$label" >&2
+    failures=$((failures + 1))
+  fi
+}
+
 require_text skills/using-superpowers/references/risk-levels.md 'R0.*Read-only.*without requested edits' 'risk reference defines R0 from observable conditions'
 require_text skills/using-superpowers/references/risk-levels.md 'R1.*Localized.*reversible.*no runtime behavior.*data contract.*security.*deployment.*external integration.*production-critical' 'risk reference defines R1 from observable conditions'
 require_text skills/using-superpowers/references/risk-levels.md 'R2.*Bug.*observable behavior.*public API.*coordinated multi-file.*without R3 consequences' 'risk reference defines R2 from observable conditions'
@@ -83,6 +104,79 @@ reject_text skills/subagent-driven-development/SKILL.md 'must explicitly specify
 reject_text skills/subagent-driven-development/implementer-prompt.md 'Subagent \(general-purpose\)|model: \[MODEL' 'implementer prompt uses available dispatch fields'
 reject_text skills/subagent-driven-development/task-reviewer-prompt.md 'Subagent \(general-purpose\)|model: \[MODEL' 'task reviewer prompt uses available dispatch fields'
 reject_text skills/requesting-code-review/code-reviewer.md 'Subagent \(general-purpose\)' 'code reviewer prompt is capability-neutral'
+reject_text skills/dispatching-parallel-agents/SKILL.md 'Subagent \(general-purpose\)' 'parallel dispatch removes unsupported named agent syntax'
+reject_text skills/dispatching-parallel-agents/SKILL.md 'never inherit your session.s context or history' 'parallel dispatch does not overstate context isolation'
+require_text skills/dispatching-parallel-agents/SKILL.md 'spawn_agent\(task_name, message, fork_turns\)' 'parallel dispatch uses the current Codex spawn schema'
+require_text skills/dispatching-parallel-agents/SKILL.md 'Choose.*fork_turns.*deliberately.*every' 'parallel dispatch requires a deliberate context window'
+require_text skills/dispatching-parallel-agents/SKILL.md 'none.*no inherited conversation' 'parallel dispatch documents isolated context'
+require_text skills/dispatching-parallel-agents/SKILL.md 'positive integer.*recent conversation' 'parallel dispatch documents bounded inherited context'
+require_text skills/dispatching-parallel-agents/SKILL.md 'all.*full conversation' 'parallel dispatch documents full inherited context'
+require_text skills/dispatching-parallel-agents/SKILL.md 'multi-part request.*not.*parallel implementation writers' 'parallel dispatch does not mistake request shape for implementation risk'
+require_text skills/dispatching-parallel-agents/SKILL.md 'R0.*read-only agents.*material.*benefit.*no side effects.*never.*implementation writers' 'R0 permits only beneficial side-effect-free read parallelism'
+require_text skills/dispatching-parallel-agents/SKILL.md 'R1.*direct execution.*default.*implementation writers' 'R1 defaults to direct execution without writer dispatch'
+require_text skills/dispatching-parallel-agents/SKILL.md 'R2/R3.*independent.*domains.*reliability benefit.*clear' 'R2 and R3 parallelize only independent domains with clear reliability benefit'
+require_text skills/dispatching-parallel-agents/SKILL.md 'team limit.*4 total agents.*controller.*at most 3 child agents concurrently' 'parallel dispatch honors the four-slot team cap'
+require_text skills/dispatching-parallel-agents/SKILL.md 'writers.*share.*checkout.*branch.*files.*must not run in parallel' 'parallel writers cannot share mutable checkout state'
+require_text skills/dispatching-parallel-agents/SKILL.md 'Before dispatching implementation writers.*separate isolated worktree.*branch.*owned file scope' 'parallel writer prompts carry isolated ownership'
+require_text skills/dispatching-parallel-agents/SKILL.md 'spawn_agent.*returns.*child.*running.*not.*sequential' 'parallel dispatch documents asynchronous child lifetime'
+reject_text skills/dispatching-parallel-agents/SKILL.md 'One per response = sequential' 'parallel dispatch does not confuse response boundaries with completion'
+reject_text skills/dispatching-parallel-agents/SKILL.md 'same response so they run in parallel' 'parallel dispatch defines overlap by child lifetime, not response grouping'
+
+require_text skills/subagent-driven-development/SKILL.md 'Point-of-Execution Authorization Gate' 'SDD has an action-time authorization gate'
+require_text skills/subagent-driven-development/SKILL.md 'destructive.*publish.*deploy.*private.*production operation.*external (side-effecting|execution) action' 'SDD names every gated side-effect class'
+require_text skills/subagent-driven-development/SKILL.md 'public (web|website).*(documentation|docs).*read-only.*R0.*does not require.*authorization' 'SDD does not gate public read-only retrieval'
+require_text skills/subagent-driven-development/SKILL.md 'Continuous execution.*missing point-of-execution authorization' 'SDD continuous execution stops for missing authorization'
+require_text skills/subagent-driven-development/implementer-prompt.md '^    ## Authorization State$' 'implementer prompt carries authorization state'
+require_text skills/subagent-driven-development/implementer-prompt.md 'Gated action:.*destructive.*publish.*deploy.*private.*production operation.*external (side-effecting|execution) action' 'implementer prompt limits the gate to action-time side effects'
+require_text skills/subagent-driven-development/implementer-prompt.md 'Authorization status:.*not-required.*authorized.*missing' 'implementer prompt records explicit authorization status'
+require_text skills/subagent-driven-development/implementer-prompt.md 'authorization.*missing or stale.*BLOCKED.*before any action' 'implementer blocks instead of inferring authorization'
+
+require_text skills/using-git-worktrees/SKILL.md 'safe isolated mechanism' 'required isolation tries a safe alternative after denial'
+require_text skills/using-git-worktrees/SKILL.md 'explicitly named isolation waiver' 'required isolation can proceed only with a named waiver'
+require_text skills/using-git-worktrees/SKILL.md 'required for R3 implementation.*parallel writers.*long-lived.*dirty overlapping' 'every required isolation trigger keeps the gate'
+reject_text skills/using-git-worktrees/SKILL.md 'working in the current directory instead' 'sandbox denial never silently degrades required isolation'
+
+require_text skills/writing-plans/SKILL.md 'R2.*direct execution.*one final review' 'R2 plan handoff defaults to direct execution and one final review'
+require_text skills/writing-plans/SKILL.md 'R3.*Subagent-Driven.*default' 'R3 plan handoff defaults to SDD when available'
+require_text skills/writing-plans/SKILL.md '^\*\*Risk Level:\*\*.*R2.*R3' 'every plan records its routing risk explicitly'
+require_text skills/writing-plans/SKILL.md 'R2.*task boundaries.*one final review.*not.*review gate' 'R2 task sizing does not force per-task review'
+reject_text skills/writing-plans/SKILL.md '^A task is.*worth a fresh reviewer.s gate' 'plan granularity does not force R2 task reviews'
+reject_text skills/writing-plans/SKILL.md 'subagent-driven-development \(recommended\) or superpowers:executing-plans' 'plan header does not recommend SDD without regard to risk'
+require_text skills/executing-plans/SKILL.md 'Risk-Specific Execution Gate' 'inline execution distinguishes R2 and R3'
+require_text skills/executing-plans/SKILL.md 'R2.*one final independent review' 'inline R2 avoids task-boundary review expansion'
+require_text skills/executing-plans/SKILL.md 'R3.*meaningful task-boundary reviews.*whole-change review' 'inline R3 preserves both review layers'
+require_text skills/executing-plans/SKILL.md 'Point-of-Execution Authorization Gate' 'inline execution checks action-time authorization'
+require_text skills/executing-plans/SKILL.md 'destructive.*publish.*deploy.*private.*production operation.*external (side-effecting|execution) action' 'inline execution gates every external side-effect class'
+require_text skills/executing-plans/SKILL.md 'public (web|website).*(documentation|docs).*read-only.*R0.*does not require.*authorization' 'inline execution does not gate public read-only retrieval'
+reject_text skills/executing-plans/SKILL.md 'Follow that skill to verify tests, present options, execute choice' 'inline handoff does not contradict action-specific finishing gates'
+require_text skills/executing-plans/SKILL.md 'using-git-worktrees.*required for R3.*isolation trigger.*ordinary R2' 'inline integration keeps worktrees risk-qualified'
+reject_text skills/executing-plans/SKILL.md 'using-git-worktrees.*Ensures isolated workspace \(creates one or verifies existing\)' 'inline integration does not force isolation for every R2 plan'
+
+require_before skills/finishing-a-development-branch/SKILL.md \
+  '### Step 1: Identify.*Action' '### Step 2: Detect Environment' \
+  'finishing identifies the requested action before environment and test gates'
+require_text skills/finishing-a-development-branch/SKILL.md 'merge.*push.*publish_pr.*fresh tests' 'only integration and publication actions require fresh tests'
+require_text skills/finishing-a-development-branch/SKILL.md 'merge.*push.*publish_pr.*fresh tests.*git status --short.*empty' 'published or integrated tests match a clean committed tree'
+require_text skills/finishing-a-development-branch/SKILL.md 'keep.*does not require.*tests' 'keep is never blocked by failing tests'
+require_text skills/finishing-a-development-branch/SKILL.md 'discard.*does not require.*tests' 'discard is never blocked by failing tests'
+require_text skills/finishing-a-development-branch/SKILL.md 'normal checkout.*switch.*safe base.*before.*delet' 'normal-checkout discard leaves the feature branch before deletion'
+require_text skills/finishing-a-development-branch/SKILL.md 'harness-owned.*preserve.*report' 'discard preserves harness-owned workspaces'
+require_text skills/finishing-a-development-branch/SKILL.md 'merge in a harness-owned workspace.*preserve.*branch.*worktree.*report' 'merge preserves harness-owned workspace state'
+require_text skills/finishing-a-development-branch/SKILL.md 'GIT_DIR == GIT_COMMON.*detached HEAD.*Reduced 3 options' 'normal detached checkout cannot expose merge'
+require_text skills/finishing-a-development-branch/SKILL.md 'Named-branch normal checkout and named-branch worktree.*4 options' 'standard menu excludes detached normal checkout'
+reject_text skills/finishing-a-development-branch/SKILL.md 'Normal repo and named-branch worktree.*4 options' 'normal checkout menu is branch-state aware'
+require_text skills/finishing-a-development-branch/SKILL.md 'detached normal checkout.*discard.*switch.*safe base.*do not delete.*branch' 'normal detached discard abandons only the confirmed commit'
+require_text skills/finishing-a-development-branch/SKILL.md 'normal checkout.*git status --short.*empty.*before.*switch' 'normal discard cannot carry dirty state onto the base'
+require_text skills/finishing-a-development-branch/SKILL.md 'For confirmed discard.*task-owned.*git worktree remove --force.*WORKTREE_PATH' 'confirmed dirty task-owned discard can remove its worktree'
+require_text skills/finishing-a-development-branch/SKILL.md 'For merge.*clean.*git worktree remove.*WORKTREE_PATH' 'merge uses clean worktree removal'
+reject_text skills/finishing-a-development-branch/SKILL.md 'For merge.*git worktree remove --force' 'merge never force-removes a worktree'
+reject_text skills/finishing-a-development-branch/SKILL.md '^git pull$' 'local merge does not silently update from a remote'
+reject_text skills/finishing-a-development-branch/SKILL.md 'git worktree prune' 'finishing never prunes unrelated worktree registrations'
+reject_text skills/finishing-a-development-branch/SKILL.md 'Before presenting options, verify tests pass' 'finishing no longer blocks keep and discard before action selection'
+
+require_text docs/superpowers/plans/2026-07-13-superzhao-codex-profile.md 'test-worktree-native-preference.*optional external harness.*not.*acceptance gate' 'plan marks upstream Claude behavior checks optional'
+reject_text docs/superpowers/plans/2026-07-13-superzhao-codex-profile.md '^bash tests/claude-code/test-worktree-native-preference\.sh$' 'plan removes external Claude behavior test from required gates'
+reject_text docs/superpowers/plans/2026-07-13-superzhao-codex-profile.md '^bash tests/claude-code/' 'plan has no required upstream Claude behavior gate'
 
 reject_text skills/using-superpowers/references/codex-tools.md 'close_agent' 'Codex reference removes unavailable close_agent'
 require_text skills/using-superpowers/references/codex-tools.md 'fork_turns' 'Codex reference documents fork_turns'

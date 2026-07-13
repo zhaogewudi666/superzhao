@@ -1,17 +1,46 @@
 ---
 name: executing-plans
-description: Use when you have a written implementation plan to execute in a separate session with review checkpoints
+description: Use when a written implementation plan must be executed in a separate session, or when approved R3 work cannot use subagents
 ---
 
 # Executing Plans
 
 ## Overview
 
-Load plan, review critically, execute all tasks, report when complete.
+Load the plan, preserve its risk-specific gates, execute each task, and report
+only after the required reviews and verification complete.
 
 **Announce at start:** "I'm using the executing-plans skill to implement this plan."
 
-**Note:** Tell your human partner that Superpowers works much better with access to subagents. The quality of its work will be significantly higher if run on a platform with subagent support (Claude Code, Codex CLI, Codex App, and Copilot CLI all qualify; see the per-platform tool refs in `../using-superpowers/references/`). If subagents are available, use superpowers:subagent-driven-development instead of this skill.
+**Note:** For R3 in the current session, use
+superpowers:subagent-driven-development when subagents are available. This skill
+is the separate-session route and the no-subagent R3 fallback; fallback does not
+waive isolation, authorization, review, verification, or rollback gates.
+
+## Risk-Specific Execution Gate
+
+- **R2:** execute the plan directly and use one final independent review for
+  material logic. Do not add task-boundary reviews unless a concrete isolation
+  need makes them materially useful.
+- **R3:** preserve meaningful task-boundary reviews and one whole-change review,
+  plus isolation, full verification, and rollback or compensation. If no
+  independent reviewer is available, stop at the review gate rather than
+  treating self-review as approval.
+
+Before the first R3 task, use superpowers:using-git-worktrees to verify or create
+the required isolation. An explicitly named isolation waiver is the only route
+to current-checkout execution when required isolation cannot be established.
+
+## Point-of-Execution Authorization Gate
+
+The gate covers any destructive action, publish or deploy action, private or production operation, and external side-effecting action. Ordinary public website and documentation read-only retrieval remains R0 and does not require point-of-execution authorization; private access or any external state change is evaluated separately.
+
+Before a covered action, record current action-specific authorization: exact
+action, target and scope, environment, authorizer, and authorizing instruction
+or turn. Plan or design approval, generic urgency, and authorization for another
+action do not count. If authorization is missing, stale, or too narrow, stop
+before the action and request it; never infer it from permission to execute the
+plan.
 
 ## The Process
 
@@ -24,17 +53,26 @@ Load plan, review critically, execute all tasks, report when complete.
 ### Step 2: Execute Tasks
 
 For each task:
-1. Mark as in_progress
-2. Follow each step exactly (plan has bite-sized steps)
-3. Run verifications as specified
-4. Mark as completed
+1. Check the point-of-execution authorization gate for the task's next action
+2. Mark as in_progress
+3. Follow each step exactly
+4. Run the task's specified verification
+5. For R3, obtain the meaningful task-boundary review and resolve all Critical
+   and Important findings before continuing; R2 does not force this review
+6. Mark as completed
 
 ### Step 3: Complete Development
 
 After all tasks complete and verified:
+- For material R2 logic, obtain the one final independent review
+- For R3, obtain the one whole-change review and run the complete relevant
+  suite, integration or migration checks, security boundaries, and rollback or
+  compensation validation
 - Announce: "I'm using the finishing-a-development-branch skill to complete this work."
 - **REQUIRED SUB-SKILL:** Use superpowers:finishing-a-development-branch
-- Follow that skill to verify tests, present options, execute choice
+- Follow that skill's action-first flow: identify the action, apply its specific
+  test or confirmation gate, present a menu only when appropriate, and preserve
+  ownership boundaries during execution and cleanup
 
 ## When to Stop and Ask for Help
 
@@ -43,6 +81,9 @@ After all tasks complete and verified:
 - Plan has critical gaps preventing starting
 - You don't understand an instruction
 - Verification fails repeatedly
+- Required isolation is unavailable and no explicitly named waiver exists
+- Point-of-execution authorization is missing for the next gated action
+- A required independent review cannot be performed
 
 **Ask for clarification rather than guessing.**
 
@@ -65,6 +106,6 @@ After all tasks complete and verified:
 ## Integration
 
 **Required workflow skills:**
-- **superpowers:using-git-worktrees** - Ensures isolated workspace (creates one or verifies existing)
+- **superpowers:using-git-worktrees** - required for R3 or another observable isolation trigger; ordinary R2 in a safe clean checkout runs in place
 - **superpowers:writing-plans** - Creates the plan this skill executes
 - **superpowers:finishing-a-development-branch** - Complete development after all tasks

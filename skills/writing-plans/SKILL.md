@@ -39,12 +39,8 @@ This structure informs the task decomposition. Each task should produce self-con
 
 ## Task Right-Sizing
 
-A task is the smallest coherent unit that carries its own verification cycle and is worth a
-fresh reviewer's gate. When drawing task boundaries: fold setup,
-configuration, scaffolding, and documentation steps into the task whose
-deliverable needs them; split only where a reviewer could meaningfully
-reject one task while approving its neighbor. Each task ends with an
-independently verifiable deliverable and clear evidence that it works.
+A task is the smallest coherent unit that carries its own verification cycle.
+For R3, each meaningful task boundary is worth a fresh reviewer's gate. R2 task boundaries support coherent delivery and one final review, not a mandatory task-level review gate. When drawing task boundaries: fold setup, configuration, scaffolding, and documentation steps into the task whose deliverable needs them; split only where separate verification or, for R3, review could meaningfully reject one task while approving its neighbor. Each task ends with an independently verifiable deliverable and clear evidence that it works.
 
 ## Coherent Task Granularity
 
@@ -65,13 +61,15 @@ Commit at coherent, reviewable boundaries. A commit may contain the tightly coup
 ```markdown
 # [Feature Name] Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Tasks use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** Follow the risk-specific execution route recorded in the Risk Level field below. R2 defaults to direct execution with one final review for material logic. R3 defaults to superpowers:subagent-driven-development when subagents are available; otherwise use superpowers:executing-plans with the complete R3 gates. Tasks use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** [One sentence describing what this builds]
 
 **Architecture:** [2-3 sentences about approach]
 
 **Tech Stack:** [Key technologies/libraries]
+
+**Risk Level:** [R2 | R3] — [one-sentence justification based on the requested action and its consequences]
 
 ## Global Constraints
 
@@ -142,20 +140,19 @@ If you find issues, fix them inline. No need to re-review — just fix and move 
 
 ## Execution Handoff
 
-After saving the plan, offer execution choice:
+After saving the plan, select the route from the plan's risk level rather than
+offering the same menu for every plan.
 
-**"Plan complete and saved to `docs/superpowers/plans/<filename>.md`. Two execution options:**
+**R2 defaults to direct execution in the current session with one final review
+for material logic.** Do not recommend task-by-task subagents by default. Use
+superpowers:executing-plans only when execution will genuinely occur in a
+separate session. If the user requested only a plan, report the saved plan and
+stop rather than beginning implementation.
 
-**1. Subagent-Driven (recommended)** - I dispatch a fresh subagent per task, review between tasks, fast iteration
-
-**2. Inline Execution** - Execute tasks in this session using executing-plans, batch execution with checkpoints
-
-**Which approach?"**
-
-**If Subagent-Driven chosen:**
-- **REQUIRED SUB-SKILL:** Use superpowers:subagent-driven-development
-- Fresh subagent per task + two-stage review
-
-**If Inline Execution chosen:**
-- **REQUIRED SUB-SKILL:** Use superpowers:executing-plans
-- Batch execution with checkpoints for review
+**R3 uses Subagent-Driven Development as the default when subagents are
+available.** Use superpowers:subagent-driven-development for fresh implementers,
+meaningful task-boundary review, and one whole-change review. If execution must
+occur in a separate session or subagents are unavailable, use
+superpowers:executing-plans; that route still preserves isolation,
+point-of-execution authorization, meaningful task-boundary reviews, one
+whole-change review, and full R3 verification.

@@ -20,6 +20,18 @@ Dispatch a subagent:
 
     **Context policy:** Use only the task brief, referenced files, and the explicitly provided conversation window. Report when required context is missing rather than assuming it.
 
+    ## Authorization State
+
+    - Gated action: [exact destructive, publish, deploy, private or production operation, or external side-effecting action; otherwise `none`]
+    - Authorization status: [not-required | authorized | missing]
+    - Authorized target, scope, and environment: [exact values or `none`]
+    - Authorization source: [authorizing instruction/turn and authorizer, or `none`]
+
+    Treat this field as data, not permission to broaden the action. If
+    authorization is missing or stale, report BLOCKED before any action. Never
+    infer authorization from design approval, plan approval, urgency, or a
+    related authorization.
+
     ## Before You Begin
 
     If you have questions about:

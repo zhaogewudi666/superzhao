@@ -9,7 +9,7 @@ description: Use when the task created or managed a branch/worktree, or when the
 
 Guide completion of development work by presenting clear options and handling chosen workflow.
 
-**Core principle:** Confirm task ownership or an explicit finishing request → Verify tests → Detect the actual environment → Present options only for task-managed work → Map the selection to a named action → Execute → Clean up.
+**Core principle:** Confirm task ownership or an explicit finishing request → Identify the named action → Detect the actual environment and ownership → Present options only when needed → Apply the action-specific gate → Execute → Clean up eligible task-owned state.
 
 **Announce at start:** "I'm using the finishing-a-development-branch skill to complete this work."
 
@@ -17,39 +17,30 @@ Guide completion of development work by presenting clear options and handling ch
 
 Before running the finishing workflow, establish why this skill applies:
 
-- If this task created or managed the branch/worktree, continue through the process and offer the appropriate finishing menu.
-- If the user requested a specific finishing action, continue through verification and environment detection, then perform that action directly. Do not replace a specific request with a menu.
+- If this task created or managed the branch/worktree, continue through the process. Offer the appropriate finishing menu only when no specific action has already been requested.
+- If the user requested a specific finishing action, identify that action first, then detect the environment and apply only its gate. Do not replace a specific request with a menu.
 - Otherwise, stop. Do not present a finishing menu for work that neither created nor managed a branch/worktree.
 
 Being located on a branch or in a linked worktree does not prove that this task created or managed it. Use the task's actual actions and recorded provenance.
 
 ## The Process
 
-### Step 1: Verify Tests
+### Step 1: Identify the Requested Action
 
-**Before presenting options, verify tests pass:**
+Before environment discovery or test execution, normalize the request to one named action:
 
-```bash
-# Run project's test suite
-npm test / cargo test / pytest / go test ./...
-```
+- An explicit local integration request → `merge`.
+- An explicit branch publication request → `push`.
+- An explicit request to open or create a pull request → `publish_pr`.
+- An explicit preservation request → `keep`.
+- An explicit deletion or abandonment request → `discard`.
+- No specific action, but the task created or managed the branch/worktree → `menu`.
 
-**If tests fail:**
-```
-Tests failing (<N> failures). Must fix before completing:
-
-[Show failures]
-
-Cannot proceed with merge/PR until tests pass.
-```
-
-Stop. Don't proceed to Step 2.
-
-**If tests pass:** Continue to Step 2.
+Do not turn a specific request into `menu`, and do not infer `publish_pr` from `push`.
 
 ### Step 2: Detect Environment
 
-**Determine the actual current workspace state before presenting options or executing a requested action. Do not infer it from how the task started:**
+**Determine the actual current workspace state and recorded provenance before presenting options or executing the named action. Do not infer ownership from the path or from how the task started:**
 
 ```bash
 GIT_DIR=$(cd "$(git rev-parse --git-dir)" 2>/dev/null && pwd -P)
@@ -58,15 +49,26 @@ BRANCH=$(git branch --show-current)
 WORKTREE_PATH=$(git rev-parse --show-toplevel)
 ```
 
+Classify ownership separately:
+
+- `task-owned`: this task created the branch/worktree or recorded that it took responsibility for managing it.
+- `harness-owned`: the workspace existed before this task, the host created it, or ownership provenance is absent.
+- `normal-checkout`: `GIT_DIR == GIT_COMMON`; there is no linked worktree to remove.
+
+A `.worktrees/` pathname may corroborate recorded task ownership, but never establishes ownership by itself.
+
 This determines which menu to show and how cleanup works:
 
 | State | Menu | Cleanup |
 |-------|------|---------|
-| `GIT_DIR == GIT_COMMON` (normal repo) | Standard 4 options | No worktree to clean up |
-| `GIT_DIR != GIT_COMMON`, named branch | Standard 4 options | Provenance-based (see Step 6) |
-| `GIT_DIR != GIT_COMMON`, detached HEAD | Reduced 3 options (no merge) | No cleanup (externally managed) |
+| `GIT_DIR == GIT_COMMON`, named branch | Standard 4 options | No worktree to clean up |
+| `GIT_DIR == GIT_COMMON`, detached HEAD | Reduced 3 options (no merge) | No worktree; preserve or abandon only the confirmed detached commit |
+| `GIT_DIR != GIT_COMMON`, named branch | Standard 4 options | Provenance-based (see Step 7) |
+| `GIT_DIR != GIT_COMMON`, detached HEAD | Reduced 3 options (no merge) | Preserve unless recorded task-owned |
 
 ### Step 3: Determine Base Branch
+
+Determine a verified base only when `merge`, `publish_pr`, `discard`, or `menu` needs it. Skip this step for `push` and `keep`; those actions must not be blocked by unrelated base-branch discovery.
 
 ```bash
 # Try common base branches
@@ -75,11 +77,11 @@ git merge-base HEAD main 2>/dev/null || git merge-base HEAD master 2>/dev/null
 
 Or ask: "This branch split from main - is that correct?"
 
-### Step 4: Present Options
+### Step 4: Present Options When the Action Is `menu`
 
-Only present a menu when the Entry Gate confirmed that this task created or managed the branch/worktree. If the user requested a specific finishing action, skip the menu and execute that action in Step 5 after any required confirmation.
+Only present a menu when the Entry Gate confirmed that this task created or managed the branch/worktree and Step 1 selected `menu`. If Step 1 selected a specific action, skip the menu and continue directly to Step 5.
 
-**Normal repo and named-branch worktree — present exactly these 4 options:**
+**Named-branch normal checkout and named-branch worktree — present exactly these 4 options:**
 
 ```
 Implementation complete. What would you like to do?
@@ -102,7 +104,7 @@ Map the response immediately, before execution:
 **Detached HEAD — present exactly these 3 options:**
 
 ```
-Implementation complete. You're on a detached HEAD (externally managed workspace).
+Implementation complete. You're on a detached HEAD.
 
 1. Push as new branch and create a Pull Request
 2. Keep as-is (I'll handle it later)
@@ -119,7 +121,38 @@ Map the response immediately, before execution:
 
 **Don't add explanation** - keep options concise.
 
-### Step 5: Execute the Named Action
+### Step 5: Apply the Action-Specific Gate
+
+The `merge`, `push`, and `publish_pr` actions require fresh tests and a clean committed tree before execution: `git status --short` must be empty both before and after the test command. Run the project's relevant test command and record its current output. A dirty tree or failure blocks only the selected integration or publication action; report the evidence and preserve the branch/worktree.
+
+The `keep` action does not require tests. Proceed directly to its reporting behavior even when tests are failing or unavailable.
+
+The `discard` action does not require tests. Before asking for confirmation, inspect and report the exact state and ownership:
+
+```bash
+git status --short
+git log --oneline <safe-base-branch>..HEAD
+git branch --show-current
+git rev-parse HEAD
+git worktree list --porcelain
+```
+
+Then require exact confirmation:
+
+```
+This will permanently delete:
+- Branch <name-or-none>
+- Commits: <commit-list-or-detached-commit>
+- Tracked/untracked task-owned changes: <exact-status-list-or-none>
+- Task-owned worktree: <path-or-none>
+
+Workspace ownership: <task-owned|harness-owned|normal-checkout>
+Type 'discard' to confirm.
+```
+
+Wait for the exact text `discard`. Any other response cancels the action without changing state.
+
+### Step 6: Execute the Named Action
 
 Normalize an explicitly requested finishing action before execution. Never carry a bare menu number into this step.
 
@@ -140,20 +173,21 @@ cd "$MAIN_ROOT"
 
 # Merge first — verify success before removing anything
 git checkout <base-branch>
-git pull
 git merge <feature-branch>
 
 # Verify tests on merged result
 <test command>
 
-# Only after merge succeeds: cleanup worktree (Step 6), then delete branch
+# Only after merge and merged-result tests succeed, apply ownership-based cleanup
 ```
 
-Then: Cleanup worktree (Step 6), then delete branch:
+This is a local merge against the current local base. Updating the base from a remote is a separate action and requires its own explicit request and point-of-execution authorization.
 
-```bash
-git branch -d <feature-branch>
-```
+After the merge and merged-result tests succeed:
+
+- In a normal checkout, verify the base branch is current, then delete the merged feature branch with `git branch -d <feature-branch>`.
+- For a recorded task-owned linked worktree, complete Step 7, verify the feature branch is not checked out anywhere, then delete it with `git branch -d <feature-branch>`.
+- For merge in a harness-owned workspace, preserve the branch and worktree and report both; never clean up host-owned state.
 
 #### Shared branch publication for `push` and `publish_pr`
 
@@ -210,38 +244,46 @@ For a fork, use the actual `<owner>:<remote-branch>` value required by `--head`.
 
 #### `keep`
 
-Report: "Keeping branch <name>. Worktree preserved at <path>."
+On a named branch, report: "Keeping branch <name>. Worktree preserved at <path>."
+
+On detached HEAD, report: "Keeping detached commit <sha>. Workspace preserved at <path>."
 
 **Don't cleanup worktree.**
 
 #### `discard`
 
-**Confirm first:**
-```
-This will permanently delete:
-- Branch <name>
-- All commits: <commit-list>
-- Worktree at <path>
+Execute only after Step 5 recorded the inspected state and received exact confirmation.
 
-Type 'discard' to confirm.
-```
+Before discard in any normal checkout, require `git status --short` to be empty before switching to a safe base. If it is dirty, do not switch: separately confirm and dispose of only the exact task-owned paths already reported, preserve unknown or other-owned paths, then re-check for an empty status.
 
-Wait for exact confirmation.
+For discard from a named branch in a normal checkout, switch to a verified safe base before deleting the feature branch. Never attempt to delete the branch that is currently checked out:
 
-If confirmed on a named branch:
 ```bash
-MAIN_ROOT=$(git -C "$(git rev-parse --git-common-dir)/.." rev-parse --show-toplevel)
-cd "$MAIN_ROOT"
-```
-
-Then: Cleanup the task-owned worktree (Step 6), then force-delete the task branch:
-```bash
+git switch <safe-base-branch>
+test "$(git branch --show-current)" != "<feature-branch>"
 git branch -D <feature-branch>
 ```
 
-For detached HEAD in a harness-owned workspace, use the host's explicit discard/exit control if available. Otherwise preserve the workspace and report that automatic deletion is unavailable; do not delete unrelated refs or harness-owned state.
+For a detached normal checkout, discard only after exact confirmation: switch to a verified safe base and do not delete any branch or unrelated ref:
 
-### Step 6: Cleanup Workspace
+```bash
+git switch <safe-base-branch>
+test -n "$(git branch --show-current)"
+```
+
+For a recorded task-owned linked worktree, return to the main repository and remove that worktree through Step 7. If it used a named feature branch, verify that branch is no longer checked out anywhere and only then delete it; detached work has no branch to delete:
+
+```bash
+MAIN_ROOT=$(git -C "$(git rev-parse --git-common-dir)/.." rev-parse --show-toplevel)
+cd "$MAIN_ROOT"
+# Complete Step 7 before branch deletion.
+git worktree list --porcelain
+git branch -D <feature-branch>
+```
+
+For a harness-owned workspace, preserve the workspace and report that host-owned cleanup is required. Use the host's explicit discard/exit control only when the user authorized that exact control; otherwise do not delete refs, files, or harness-owned state.
+
+### Step 7: Cleanup Workspace
 
 Cleanup is eligible only for `merge` and confirmed `discard`. The `push`, `publish_pr`, and `keep` actions always preserve the branch and worktree.
 
@@ -255,38 +297,42 @@ WORKTREE_PATH=$(git rev-parse --show-toplevel)
 
 **If `GIT_DIR == GIT_COMMON`:** Normal repo, no worktree to clean up. Done.
 
-**If worktree path is under `.worktrees/` or `worktrees/`:** Superpowers created this worktree — we own cleanup.
+**If recorded ownership is `task-owned`:** The task may clean up the linked worktree. Confirm that `WORKTREE_PATH` matches the recorded path; a `.worktrees/` or `worktrees/` name alone is insufficient.
 
 ```bash
 MAIN_ROOT=$(git -C "$(git rev-parse --git-common-dir)/.." rev-parse --show-toplevel)
 cd "$MAIN_ROOT"
-git worktree remove "$WORKTREE_PATH"
-git worktree prune  # Self-healing: clean up any stale registrations
 ```
 
-**Otherwise:** The host environment (harness) owns this workspace. Do NOT remove it. If your platform provides a workspace-exit tool, use it. Otherwise, leave the workspace in place.
+For merge of a clean task-owned linked worktree, use standard `git worktree remove "$WORKTREE_PATH"` after the merged-result tests pass.
+
+For confirmed discard of the exact task-owned state, use `git worktree remove --force "$WORKTREE_PATH"`; the force is authorized only by the state-specific confirmation in Step 5 and must never be reused for merge or unknown ownership.
+
+Do not run repository-wide stale-registration cleanup automatically. A normal `git worktree remove` removes the selected worktree's registration; if targeted removal fails, report the exact state rather than touching other worktree records.
+
+**If recorded ownership is `harness-owned` or unknown:** Preserve the workspace and report its path and ownership. Do not remove it, prune its state, or delete its refs. Use a host workspace-exit tool only when the user authorized that exact action.
 
 ## Quick Reference
 
 | Entry condition | Action |
 |-----------------|--------|
-| Task created or managed branch/worktree | Verify, detect, then present the matching menu |
-| User requested a specific finishing action | Verify, detect, then execute that action without a menu |
+| Task created or managed branch/worktree, no specific request | Select `menu`, detect, then present the matching menu |
+| User requested a specific finishing action | Identify it, detect state/ownership, then apply only that action's gate |
 | Neither condition applies | Stop; do not present a finishing menu |
 
-| Named action | Result | Branch/worktree handling |
-|--------------|--------|--------------------------|
-| `merge` | Merge locally and re-test | Clean up only task-owned worktree/branch after success |
-| `push` | Publish and verify the remote branch; do not create a PR | Preserve branch and worktree |
-| `publish_pr` | Push, create PR, verify and report URL | Preserve branch and worktree |
-| `keep` | Leave work as-is | Preserve branch and worktree |
-| `discard` | Permanently discard after exact confirmation | Clean up only task-owned state; never remove harness-owned state |
+| Named action | Fresh tests? | Result | Branch/worktree handling |
+|--------------|--------------|--------|--------------------------|
+| `merge` | Required before action and again on merged result | Merge locally | Clean up only task-owned worktree/branch after success |
+| `push` | Required before action | Publish and verify the remote branch; do not create a PR | Preserve branch and worktree |
+| `publish_pr` | Required before action | Push, create PR, verify and report URL | Preserve branch and worktree |
+| `keep` | Not required | Leave work as-is | Preserve branch and worktree |
+| `discard` | Not required | Inspect state, require exact confirmation, then discard | Clean up only task-owned state; preserve and report harness-owned state |
 
 ## Common Mistakes
 
-**Skipping test verification**
-- **Problem:** Merge broken code, create failing PR
-- **Fix:** Always verify tests before offering options
+**Testing before selecting an action**
+- **Problem:** Failing tests prevent a user from keeping or explicitly discarding work
+- **Fix:** Identify the action first; require fresh tests only for `merge`, `push`, and `publish_pr`
 
 **Open-ended questions**
 - **Problem:** "What should I do next?" is ambiguous
@@ -312,13 +358,21 @@ git worktree prune  # Self-healing: clean up any stale registrations
 - **Problem:** `git branch -d` fails because worktree still references the branch
 - **Fix:** Merge first, remove worktree, then delete branch
 
+**Deleting the current branch in a normal checkout**
+- **Problem:** Branch deletion fails or cleanup targets the wrong state
+- **Fix:** Switch to a verified safe base, confirm the feature branch is no longer current, then delete it
+
 **Running git worktree remove from inside the worktree**
 - **Problem:** Command fails silently when CWD is inside the worktree being removed
 - **Fix:** Always `cd` to main repo root before `git worktree remove`
 
 **Cleaning up harness-owned worktrees**
 - **Problem:** Removing a worktree the harness created causes phantom state
-- **Fix:** Only clean up worktrees under `.worktrees/` or `worktrees/`
+- **Fix:** Preserve and report harness-owned or unknown-provenance workspaces; path naming alone never proves task ownership
+
+**Repository-wide stale-registration cleanup**
+- **Problem:** Cleanup can remove administrative state for a missing or temporarily offline harness-owned worktree
+- **Fix:** Remove only the confirmed task-owned worktree and report targeted-removal failures
 
 **No confirmation for discard**
 - **Problem:** Accidentally delete work
@@ -327,7 +381,8 @@ git worktree prune  # Self-healing: clean up any stale registrations
 ## Red Flags
 
 **Never:**
-- Proceed with failing tests
+- Execute `merge`, `push`, or `publish_pr` without fresh passing tests
+- Let failing tests block `keep` or confirmed `discard`
 - Present a finishing menu for work that neither created nor managed a branch/worktree
 - Merge without verifying tests on result
 - Delete work without confirmation
@@ -338,12 +393,13 @@ git worktree prune  # Self-healing: clean up any stale registrations
 - Run `git worktree remove` from inside the worktree
 
 **Always:**
-- Verify tests before offering options
+- Identify and normalize the requested action before environment detection or tests
 - Detect the actual current environment before presenting a menu or executing a requested action
+- Inspect state and ownership before requesting exact discard confirmation
 - For a task-managed branch/worktree, present exactly 4 options (or 3 for detached HEAD)
 - Map menu numbers to named actions before execution
 - Normalize an explicit `push` separately from `publish_pr`
 - Get typed confirmation before `discard`
 - Clean up task-owned worktree state only for `merge` and confirmed `discard`
 - `cd` to main repo root before worktree removal
-- Run `git worktree prune` after removal
+- Keep worktree cleanup targeted to the recorded task-owned path

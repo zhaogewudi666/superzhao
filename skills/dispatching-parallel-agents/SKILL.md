@@ -7,11 +7,23 @@ description: Use when facing 2+ independent tasks that can be worked on without 
 
 ## Overview
 
-You delegate tasks to specialized agents with isolated context. By precisely crafting their instructions and context, you ensure they stay focused and succeed at their task. They should never inherit your session's context or history — you construct exactly what they need. This also preserves your own context for coordination work.
+You delegate tasks to specialized agents with deliberately selected context. By precisely crafting their instructions and context window, you keep them focused while providing any history they genuinely need. This also preserves your own context for coordination work.
 
 When you have multiple unrelated failures (different test files, different subsystems, different bugs), investigating them sequentially wastes time. Each investigation is independent and can happen in parallel.
 
 **Core principle:** Dispatch one agent per independent problem domain. Let them work concurrently.
+
+## Risk and Concurrency Gate
+
+A multi-part request is not by itself a reason to start parallel implementation writers. Route by risk before dispatching:
+
+- **R0:** Use read-only agents in parallel only for material reliability or latency benefit, with no side effects; never start implementation writers.
+- **R1:** direct execution is the default; do not dispatch implementation writers merely because the request has several parts.
+- **R2/R3:** Dispatch in parallel only when tasks belong to independent domains and the reliability benefit is clear; otherwise keep the work with one agent or sequence it.
+
+The current team limit is 4 total agents including the controller; a controller may run at most 3 child agents concurrently, and fewer when other live agents already occupy slots. Check live capacity before every dispatch batch.
+
+Implementation writers that share a checkout, branch, or files must not run in parallel. Give writers separate isolated worktrees with disjoint ownership, or sequence them. Read-only investigation can share a checkout only when it cannot mutate generated files, caches, locks, or other state.
 
 ## When to Use
 
@@ -62,19 +74,28 @@ Each agent gets:
 - **Clear goal:** Make these tests pass
 - **Constraints:** Don't change other code
 - **Expected output:** Summary of what you found and fixed
+- **Context window:** An explicit `fork_turns` choice
+
+Before dispatching implementation writers, assign each a separate isolated worktree and branch plus an owned file scope, and put those exact boundaries in the prompt. If separate isolation is unavailable, dispatch read-only investigators or run the writers sequentially.
 
 ### 3. Dispatch in Parallel
 
-Issue all three subagent dispatches in the same response — they run in parallel:
+Use `spawn_agent(task_name, message, fork_turns)` for each dispatch. Choose `fork_turns` deliberately for every call:
+
+- `"none"`: no inherited conversation; the message and referenced files are self-contained.
+- A positive integer string: only that recent conversation window is inherited.
+- `"all"`: the full conversation is inherited because the task genuinely requires it.
+
+Spawn the batch without waiting for any child to finish:
 
 ```text
-Subagent (general-purpose): "Fix agent-tool-abort.test.ts failures"
-Subagent (general-purpose): "Fix batch-completion-behavior.test.ts failures"
-Subagent (general-purpose): "Fix tool-approval-race-conditions.test.ts failures"
+spawn_agent(task_name="fix_abort", message="In isolated worktree <abort-path> on <abort-branch>, fix agent-tool-abort.test.ts only", fork_turns="none")
+spawn_agent(task_name="fix_batch", message="In isolated worktree <batch-path> on <batch-branch>, fix batch-completion-behavior.test.ts only", fork_turns="none")
+spawn_agent(task_name="fix_approval", message="In isolated worktree <approval-path> on <approval-branch>, fix tool-approval-race-conditions.test.ts only", fork_turns="none")
 # All three run concurrently.
 ```
 
-Multiple dispatch calls in one response = parallel execution. One per response = sequential.
+`spawn_agent` returns while its child may keep running, so one call per response is not sequential by itself. Sequential execution means waiting for the current child to finish before spawning the next; a parallel batch spawns without waiting, then checks live capacity and status.
 
 ### 4. Review and Integrate
 
@@ -88,7 +109,7 @@ When agents return:
 
 Good agent prompts are:
 1. **Focused** - One clear problem domain
-2. **Self-contained** - All context needed to understand the problem
+2. **Context-complete** - The message plus the chosen inherited window contains what the task needs
 3. **Specific about output** - What should the agent return?
 
 ```markdown
@@ -142,7 +163,7 @@ Return: Summary of what you found and what you fixed.
 - batch-completion-behavior.test.ts: 2 failures (tools not executing)
 - tool-approval-race-conditions.test.ts: 1 failure (execution count = 0)
 
-**Decision:** Independent domains - abort logic separate from batch completion separate from race conditions
+**Decision:** Independent domains - abort logic separate from batch completion separate from race conditions. Each writer receives a separate isolated worktree/branch and disjoint file ownership.
 
 **Dispatch:**
 ```

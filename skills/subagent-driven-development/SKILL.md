@@ -31,7 +31,24 @@ and `fork_turns: "all"` only when the full session is genuinely required.
 **Narration:** between tool calls, narrate at most one short line — the
 ledger and the tool results carry the record.
 
-**Continuous execution:** Do not pause to check in with your human partner between tasks. Execute all tasks from the plan without stopping. The only reasons to stop are: BLOCKED status you cannot resolve, ambiguity that genuinely prevents progress, or all tasks complete. "Should I continue?" prompts and progress summaries waste their time — they asked you to execute the plan, so execute it.
+**Continuous execution:** Do not pause to check in with your human partner between tasks. Execute all tasks from the plan without stopping. The reasons to stop are: BLOCKED status you cannot resolve, ambiguity that genuinely prevents progress, missing point-of-execution authorization for the next action, or all tasks complete. "Should I continue?" prompts and progress summaries waste their time — they asked you to execute the plan, so execute it.
+
+## Point-of-Execution Authorization Gate
+
+The gate covers any destructive action, publish or deploy action, private or production operation, and external side-effecting action. Ordinary public website and documentation read-only retrieval remains R0 and does not require point-of-execution authorization; private access or any external state change is evaluated separately.
+
+Before dispatching or performing a covered action, the controller MUST record
+current, action-specific authorization for that exact action. Record the action,
+target and scope, environment, who authorized it, and the authorizing instruction
+or turn. Design approval, plan approval, generic urgency, and authorization for
+a different action are not point-of-execution authorization.
+
+If current authorization is absent, stale, or narrower than the next action,
+stop before dispatch. Report the blocked action and request authorization; do
+not infer it or let continuous execution carry the task across this gate. Pass
+the recorded state into the implementer prompt's required `Authorization State`
+field. The controller remains responsible for checking authorization again at
+the actual point of execution.
 
 ## When to Use
 

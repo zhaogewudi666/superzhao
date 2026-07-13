@@ -49,13 +49,16 @@ Inspect the actual working tree with `git status --short` and compare dirty path
 
 R0/R1 and ordinary R2 work already in a safe clean checkout do not create a worktree by default. Work in place and skip to Step 2. An explicit user instruction to use a worktree still applies.
 
-When the isolation gate applies, continue with consent:
+When the isolation gate applies, continue with mechanism consent. Isolation is required for R3 implementation, parallel writers, long-lived work that needs an isolated lifecycle, and dirty overlapping edits; consent chooses the mechanism, not whether to silently drop the gate.
 
 Has the user already indicated their worktree preference in your instructions? If not, ask for consent before creating a worktree:
 
 > "Would you like me to set up an isolated worktree? It protects your current branch from changes."
 
-Honor any existing declared preference without asking. If the user declines consent, work in place and skip to Step 2.
+Honor any existing declared preference without asking. If the user declines the
+available isolation mechanisms, stop before editing and request an explicitly
+named isolation waiver. Record exactly which isolation gate is waived and for
+which scope; generic permission to continue is not a waiver.
 
 ## Step 1: Create Isolated Workspace
 
@@ -110,7 +113,11 @@ git worktree add "$path" -b "$BRANCH_NAME"
 cd "$path"
 ```
 
-**Sandbox fallback:** If `git worktree add` fails with a permission error (sandbox denial), tell the user the sandbox blocked worktree creation and you're working in the current directory instead. Then run setup and baseline tests in place.
+**Sandbox denial:** If `git worktree add` is denied, try another safe isolated
+mechanism already supported by the host, such as a host-managed isolated
+workspace or a disposable clone at the recorded base commit. If none is
+available, stop before editing and request an explicitly named isolation waiver.
+Never convert sandbox denial into permission to edit the current checkout.
 
 ## Step 2: Project Setup
 
@@ -167,7 +174,7 @@ Ready to implement <feature-name>
 | Both exist | Use `.worktrees/` |
 | Neither exists | Check instruction file, then default `.worktrees/` |
 | Directory not ignored | Add to .gitignore + commit |
-| Permission error on create | Sandbox fallback, work in place |
+| Permission error on create | Try another safe isolated mechanism; otherwise stop for an explicit waiver |
 | Tests fail during baseline | Report failures + ask |
 | No package.json/Cargo.toml | Skip dependency install |
 
@@ -203,6 +210,11 @@ Ready to implement <feature-name>
 - **Problem:** Can't distinguish new bugs from pre-existing issues
 - **Fix:** Report failures, get explicit permission to proceed
 
+### Silently dropping required isolation
+
+- **Problem:** A sandbox denial or declined mechanism turns into edits in the current checkout
+- **Fix:** Try another safe isolated mechanism or stop for an explicitly named isolation waiver
+
 ## Red Flags
 
 **Never:**
@@ -210,6 +222,7 @@ Ready to implement <feature-name>
 - Create a worktree by default for safe clean R0/R1 or ordinary R2 work
 - Use `git worktree add` when you have a native worktree tool (e.g., `EnterWorktree`). This is the #1 mistake — if you have it, use it.
 - Skip Step 1a by jumping straight to Step 1b's git commands
+- Treat sandbox denial or declined isolation as permission to edit the current checkout
 - Create worktree without verifying it's ignored (project-local)
 - Skip baseline test verification
 - Proceed with failing tests without asking
@@ -218,6 +231,7 @@ Ready to implement <feature-name>
 - Run Step 0 detection first
 - Apply the isolation gate before asking for consent or creating anything
 - Prefer native tools over git fallback
+- Preserve required isolation or obtain an explicitly named isolation waiver before editing
 - Follow directory priority: explicit instructions > existing project-local directory > default
 - Verify directory is ignored for project-local
 - Auto-detect and run project setup

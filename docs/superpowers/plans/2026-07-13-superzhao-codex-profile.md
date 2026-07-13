@@ -664,14 +664,14 @@ git commit -m "docs: explain Superzhao maintenance"
 
 ```bash
 bash tests/codex-profile/run-tests.sh
+bash tests/codex-profile/test-risk-routing-contract.sh
 bash tests/shell-lint/test-lint-shell.sh
-bash tests/claude-code/test-sdd-workspace.sh
-bash tests/claude-code/test-worktree-path-policy.sh
-bash tests/claude-code/test-worktree-native-preference.sh
 git diff --check upstream/main...HEAD
 ```
 
 Expected: all commands exit 0.
+
+These deterministic current-head Codex contracts are the fork acceptance gates. Upstream `tests/claude-code/` behavior tests, including `tests/claude-code/test-worktree-native-preference.sh`, are an optional external harness and are not a fork acceptance gate. Run that harness only when its local dependencies are available and any external Claude/model calls, credentials, and costs have separate explicit authorization; do not treat a skipped external harness as an acceptance failure.
 
 - [ ] **Step 2: Run fresh-context behavior samples**
 

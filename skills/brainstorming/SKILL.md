@@ -1,25 +1,25 @@
 ---
 name: brainstorming
-description: "You MUST use this before any creative work - creating features, building components, adding functionality, or modifying behavior. Explores user intent, requirements and design before implementation."
+description: Use when requirements are materially ambiguous, consequential design trade-offs exist, architecture or interfaces must be chosen, or work is high risk (R3), before implementation
 ---
 
 # Brainstorming Ideas Into Designs
 
-Help turn ideas into fully formed designs and specs through natural collaborative dialogue.
+Help turn materially ambiguous or consequential ideas into validated designs, with rigor scaled to risk.
 
-Start by understanding the current project context, then ask questions one at a time to refine the idea. Once you understand what you're building, present the design and get user approval.
+Start by understanding the current project context, then ask questions one at a time to refine the idea. R3 work continues through an approved design and written spec; R2 work can stop once a concise inline design is clear.
 
 <HARD-GATE>
-Do NOT invoke any implementation skill, write any code, scaffold any project, or take any implementation action until you have presented a design and the user has approved it. This applies to EVERY project regardless of perceived simplicity.
+For R3 work, do not implement until the design and written spec are approved. For R2 work with clear intent and interfaces, an inline design is sufficient. R0 and R1 do not use this skill.
 </HARD-GATE>
 
-## Anti-Pattern: "This Is Too Simple To Need A Design"
+## Risk-Proportional Use
 
-Every project goes through this process. A todo list, a single-function utility, a config change — all of them. "Simple" projects are where unexamined assumptions cause the most wasted work. The design can be short (a few sentences for truly simple projects), but you MUST present it and get approval.
+Use the full checklist for R3. For R2, stop after a concise design when scope, interfaces, error handling, and verification are clear; do not create or commit a spec unless the user or project requires one.
 
 ## Checklist
 
-You MUST create a task for each of these items and complete them in order:
+For R3, you MUST create a task for each of these items and complete them in order:
 
 1. **Explore project context** — check files, docs, recent commits
 2. **Offer the visual companion just-in-time** — NOT upfront. The first time a question would genuinely be clearer shown than described, offer it then (its own message); on approval its browser tab opens for you. If no visual question ever arises, never offer it. See the Visual Companion section below.
@@ -32,6 +32,8 @@ You MUST create a task for each of these items and complete them in order:
 9. **Transition to implementation** — invoke writing-plans skill to create implementation plan
 
 ## Process Flow
+
+The full R3 process follows this flow:
 
 ```dot
 digraph brainstorming {
@@ -58,9 +60,9 @@ digraph brainstorming {
 }
 ```
 
-**The terminal state is invoking writing-plans.** Do NOT invoke frontend-design, mcp-builder, or any other implementation skill. The ONLY skill you invoke after brainstorming is writing-plans.
+**For R3, the terminal state is invoking writing-plans.** Do NOT invoke frontend-design, mcp-builder, or any other implementation skill. The ONLY skill you invoke after the full R3 brainstorming process is writing-plans.
 
-## The Process
+## The Full R3 Process
 
 **Understanding the idea:**
 
@@ -99,7 +101,7 @@ digraph brainstorming {
 - Where existing code has problems that affect the work (e.g., a file that's grown too large, unclear boundaries, tangled responsibilities), include targeted improvements as part of the design - the way a good developer improves code they're working in.
 - Don't propose unrelated refactoring. Stay focused on what serves the current goal.
 
-## After the Design
+## After the R3 Design
 
 **Documentation:**
 
@@ -127,7 +129,7 @@ Wait for the user's response. If they request changes, make them and re-run the 
 
 **Implementation:**
 
-- Invoke the writing-plans skill to create a detailed implementation plan
+- For R3, invoke the writing-plans skill to create a detailed implementation plan
 - Do NOT invoke any other skill. writing-plans is the next step.
 
 ## Key Principles
@@ -135,8 +137,8 @@ Wait for the user's response. If they request changes, make them and re-run the 
 - **One question at a time** - Don't overwhelm with multiple questions
 - **Multiple choice preferred** - Easier to answer than open-ended when possible
 - **YAGNI ruthlessly** - Remove unnecessary features from all designs
-- **Explore alternatives** - Always propose 2-3 approaches before settling
-- **Incremental validation** - Present design, get approval before moving on
+- **Explore alternatives** - For R3, always propose 2-3 approaches before settling
+- **Incremental validation** - For R3, present design and get approval before moving on
 - **Be flexible** - Go back and clarify when something doesn't make sense
 
 ## Visual Companion

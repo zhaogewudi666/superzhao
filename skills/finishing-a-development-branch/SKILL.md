@@ -121,7 +121,13 @@ Map the response immediately, before execution:
 
 ### Step 5: Execute the Named Action
 
-Normalize an explicitly requested finishing action to the same names. Never carry a bare menu number into this step.
+Normalize an explicitly requested finishing action before execution. Never carry a bare menu number into this step.
+
+- An explicit `push` request → `push`.
+- An explicit request to open or create a PR → `publish_pr`.
+- Both menus' publication choices → `publish_pr`, as mapped in Step 4.
+
+Authorization to `push` is not authorization to create a PR.
 
 #### `merge`
 
@@ -149,9 +155,9 @@ Then: Cleanup worktree (Step 6), then delete branch:
 git branch -d <feature-branch>
 ```
 
-#### `publish_pr`
+#### Shared branch publication for `push` and `publish_pr`
 
-Push without force. A push alone does not complete this action.
+Both actions begin with the same safe, non-force branch publication and remote verification.
 
 On a named branch:
 
@@ -183,7 +189,15 @@ Never force-push either path. Verify the remote branch exists:
 git ls-remote --exit-code --heads origin refs/heads/<remote-branch>
 ```
 
-Then create the pull request. Use an available platform or GitHub PR-creation tool and verify the returned PR with its corresponding read tool. If no such tool is available, use GitHub CLI:
+#### `push`
+
+After the shared publication procedure succeeds, report the remote and verified branch name, then stop. A `push` action **MUST NOT** create a PR or invoke PR-creation tooling.
+
+**Do NOT clean up the branch or worktree** — preserve both for subsequent work.
+
+#### `publish_pr`
+
+After the shared publication procedure succeeds, create the pull request. Use an available platform or GitHub PR-creation tool and verify the returned PR with its corresponding read tool. If no such tool is available, use GitHub CLI:
 
 ```bash
 CREATED_PR_URL=$(gh pr create --base <base-branch> --head <remote-branch> --fill)
@@ -229,7 +243,7 @@ For detached HEAD in a harness-owned workspace, use the host's explicit discard/
 
 ### Step 6: Cleanup Workspace
 
-Cleanup is eligible only for `merge` and confirmed `discard`. The `publish_pr` and `keep` actions always preserve the branch and worktree.
+Cleanup is eligible only for `merge` and confirmed `discard`. The `push`, `publish_pr`, and `keep` actions always preserve the branch and worktree.
 
 Use the actual values captured in Step 2. If they need refreshing, do so while still inside the task workspace and before changing directories; do not overwrite them after moving to the main checkout:
 
@@ -263,6 +277,7 @@ git worktree prune  # Self-healing: clean up any stale registrations
 | Named action | Result | Branch/worktree handling |
 |--------------|--------|--------------------------|
 | `merge` | Merge locally and re-test | Clean up only task-owned worktree/branch after success |
+| `push` | Publish and verify the remote branch; do not create a PR | Preserve branch and worktree |
 | `publish_pr` | Push, create PR, verify and report URL | Preserve branch and worktree |
 | `keep` | Leave work as-is | Preserve branch and worktree |
 | `discard` | Permanently discard after exact confirmation | Clean up only task-owned state; never remove harness-owned state |
@@ -281,11 +296,15 @@ git worktree prune  # Self-healing: clean up any stale registrations
 - **Problem:** Routine work in an existing checkout triggers an irrelevant merge, PR, keep, or discard decision
 - **Fix:** Confirm this task created or managed the branch/worktree before presenting any menu
 
-**Cleaning up after `publish_pr`**
-- **Problem:** Remove worktree user needs for PR iteration
-- **Fix:** Preserve the branch/worktree for `publish_pr` and `keep`; cleanup is only eligible for `merge` and confirmed `discard`
+**Cleaning up after `push` or `publish_pr`**
+- **Problem:** Remove a branch/worktree the user still needs for follow-up or PR iteration
+- **Fix:** Preserve the branch/worktree for `push`, `publish_pr`, and `keep`; cleanup is only eligible for `merge` and confirmed `discard`
 
-**Stopping after push**
+**Turning `push` into PR creation**
+- **Problem:** Treats remote publication as authorization for an additional external side effect
+- **Fix:** Report the verified remote branch and stop; only `publish_pr` may create a PR
+
+**Stopping `publish_pr` after branch publication**
 - **Problem:** Reports publication complete without creating or verifying the pull request
 - **Fix:** Create the PR, verify it through a read operation, and report its URL
 
@@ -312,6 +331,7 @@ git worktree prune  # Self-healing: clean up any stale registrations
 - Present a finishing menu for work that neither created nor managed a branch/worktree
 - Merge without verifying tests on result
 - Delete work without confirmation
+- Create a PR for an explicit `push` request
 - Force-push without explicit request
 - Remove a worktree before confirming merge success
 - Clean up worktrees you didn't create (provenance check)
@@ -322,6 +342,7 @@ git worktree prune  # Self-healing: clean up any stale registrations
 - Detect the actual current environment before presenting a menu or executing a requested action
 - For a task-managed branch/worktree, present exactly 4 options (or 3 for detached HEAD)
 - Map menu numbers to named actions before execution
+- Normalize an explicit `push` separately from `publish_pr`
 - Get typed confirmation before `discard`
 - Clean up task-owned worktree state only for `merge` and confirmed `discard`
 - `cd` to main repo root before worktree removal

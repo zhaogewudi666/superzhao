@@ -1,0 +1,38 @@
+{
+  "schema": "superzhao.approval-record/v1",
+  "recorded_at": "2026-07-14T10:30:49Z",
+  "authorizer": "workspace user",
+  "source": {
+    "kind": "conversation instruction",
+    "text": "照你说的办，直到完成所有 skills 的优化并在本地完成已有 skills 的更新然后提交到远程仓库"
+  },
+  "artifact": {
+    "path": "docs/superpowers/specs/2026-07-14-superzhao-adaptive-control-plane-v2-design.md",
+    "sha256": "9bc340d0bb7100bfee6f4d7040188a7a59441514587b06464915699c64d76331",
+    "base_commit": "e8e5a618d7f1bfa4b88ec298c8c500e2fda42295"
+  },
+  "authorized_publish_target": {
+    "repository_url": "https://github.com/zhaogewudi666/superzhao.git",
+    "destination_ref": "refs/heads/main",
+    "mode": "ordinary non-force push after verified local integration"
+  },
+  "authorized_scope": [
+    "implement the bound Superzhao Adaptive Control Plane v2 design in this repository",
+    "update the existing managed Superzhao Skills in the local Codex profile after verification and backup",
+    "create ordinary local commits for this scope",
+    "perform one non-force push of the verified integrated result to the bound repository URL and destination ref"
+  ],
+  "excluded_actions": [
+    "force-push",
+    "open or update an upstream obra/superpowers pull request",
+    "production deployment",
+    "destructive cleanup of user-owned branches, worktrees, files, or backups",
+    "publish scope not contained in the bound design"
+  ],
+  "execution_condition": "Recheck the final action, remote URL, destination ref, HEAD, profile digest, and changed-path scope at the point of installation or push. Material drift invalidates this record for that action.",
+  "provenance": {
+    "recorded_by": "Codex desktop controller",
+    "model": "GPT-5-class system identity; exact deployment identifier not exposed to the controller",
+    "note": "This file is an agent-transcribed audit record of the user's instruction, not a cryptographic user signature."
+  }
+}

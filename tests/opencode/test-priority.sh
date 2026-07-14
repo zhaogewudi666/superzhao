@@ -7,6 +7,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+TIMEOUT_RUNNER="$(cd "$SCRIPT_DIR/../.." && pwd)/scripts/run-with-timeout.mjs"
 OPENCODE_TEST_TIMEOUT_SECONDS="${OPENCODE_TEST_TIMEOUT_SECONDS:-120}"
 
 echo "=== Test: Skill Priority Resolution ==="
@@ -107,7 +108,7 @@ run_opencode() {
     local exit_code
 
     set +e
-    command_output=$(cd "$dir" && timeout "${OPENCODE_TEST_TIMEOUT_SECONDS}s" opencode run --print-logs --format json "$prompt" 2>&1)
+    command_output=$(cd "$dir" && node "$TIMEOUT_RUNNER" "$OPENCODE_TEST_TIMEOUT_SECONDS" -- opencode run --print-logs --format json "$prompt" 2>&1)
     exit_code=$?
     set -e
 

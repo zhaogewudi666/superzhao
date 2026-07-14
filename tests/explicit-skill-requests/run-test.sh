@@ -23,6 +23,7 @@ fi
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # Get the superpowers plugin root (two levels up)
 PLUGIN_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
+TIMEOUT_RUNNER="$PLUGIN_DIR/scripts/run-with-timeout.mjs"
 
 TIMESTAMP=$(date +%s)
 OUTPUT_DIR="/tmp/superpowers-tests/${TIMESTAMP}/explicit-skill-requests/${SKILL_NAME}"
@@ -68,12 +69,26 @@ echo "Running claude -p with explicit skill request..."
 echo "Prompt: $PROMPT"
 echo ""
 
-timeout 300 claude -p "$PROMPT" \
+set +e
+node "$TIMEOUT_RUNNER" 300 -- claude -p "$PROMPT" \
     --plugin-dir "$PLUGIN_DIR" \
     --dangerously-skip-permissions \
     --max-turns "$MAX_TURNS" \
     --output-format stream-json \
-    > "$LOG_FILE" 2>&1 || true
+    > "$LOG_FILE" 2>&1
+RUN_STATUS=$?
+set -e
+
+if [ "$RUN_STATUS" -ne 0 ]; then
+    echo ""
+    if [ "$RUN_STATUS" -eq 124 ]; then
+        echo "INDETERMINATE: Claude timed out; partial output is not scored"
+    else
+        echo "FAIL: Claude execution exited with status $RUN_STATUS; partial output is not scored"
+    fi
+    echo "Full log: $LOG_FILE"
+    exit "$RUN_STATUS"
+fi
 
 echo ""
 echo "=== Results ==="

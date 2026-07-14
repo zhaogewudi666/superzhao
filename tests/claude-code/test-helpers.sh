@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 # Helper functions for Claude Code skill tests
 
+TEST_HELPERS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+TIMEOUT_RUNNER="$(cd "$TEST_HELPERS_DIR/../.." && pwd)/scripts/run-with-timeout.mjs"
+export TIMEOUT_RUNNER
+
 # Run Claude Code with a prompt and capture output
 # Usage: run_claude "prompt text" [timeout_seconds] [allowed_tools]
 run_claude() {
@@ -9,14 +13,14 @@ run_claude() {
     local allowed_tools="${3:-}"
     local output_file=$(mktemp)
 
-    # Build command as an argv array so timeout wraps claude directly.
+    # Build command as an argv array so the timeout helper wraps claude directly.
     local cmd=(claude -p "$prompt")
     if [ -n "$allowed_tools" ]; then
         cmd+=(--allowed-tools="$allowed_tools")
     fi
 
     # Run Claude in headless mode with timeout
-    if timeout "$timeout" "${cmd[@]}" > "$output_file" 2>&1; then
+    if node "$TIMEOUT_RUNNER" "$timeout" -- "${cmd[@]}" > "$output_file" 2>&1; then
         cat "$output_file"
         rm -f "$output_file"
         return 0

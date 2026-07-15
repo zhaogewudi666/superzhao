@@ -227,6 +227,12 @@ reject_text skills/finishing-a-development-branch/SKILL.md 'For merge.*git workt
 reject_text skills/finishing-a-development-branch/SKILL.md '^git pull$' 'local merge does not silently update from a remote'
 reject_text skills/finishing-a-development-branch/SKILL.md 'git worktree prune' 'finishing never prunes unrelated worktree registrations'
 reject_text skills/finishing-a-development-branch/SKILL.md 'Before presenting options, verify tests pass' 'finishing no longer blocks keep and discard before action selection'
+require_text skills/finishing-a-development-branch/SKILL.md 'Action Binding.*named action.*remote URL.*remote ref.*full HEAD.*changed-path scope.*authorizing instruction' 'finishing binds authorization to the exact action and content'
+require_text skills/finishing-a-development-branch/SKILL.md 'Immediately before.*recheck.*Action Binding.*drift.*reauthorization' 'finishing reauthorizes after point-of-execution drift'
+require_text skills/finishing-a-development-branch/SKILL.md 'PUBLISHED_SHA=.*git rev-parse' 'publication freezes the local commit identity'
+require_text skills/finishing-a-development-branch/SKILL.md 'REMOTE_SHA=.*git ls-remote' 'publication reads back the remote commit identity'
+require_text skills/finishing-a-development-branch/SKILL.md 'test.*REMOTE_SHA.*PUBLISHED_SHA' 'publication proves remote and local commit equality'
+require_text skills/finishing-a-development-branch/SKILL.md 'remote SHA.*exactly equals.*pushed local SHA' 'publication claim requires exact remote equality'
 
 require_text docs/superpowers/plans/2026-07-13-superzhao-codex-profile.md 'test-worktree-native-preference.*optional external harness.*not.*acceptance gate' 'plan marks upstream Claude behavior checks optional'
 reject_text docs/superpowers/plans/2026-07-13-superzhao-codex-profile.md '^bash tests/claude-code/test-worktree-native-preference\.sh$' 'plan removes external Claude behavior test from required gates'

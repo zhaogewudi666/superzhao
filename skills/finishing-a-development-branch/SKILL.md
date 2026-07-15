@@ -152,6 +152,26 @@ Type 'discard' to confirm.
 
 Wait for the exact text `discard`. Any other response cancels the action without changing state.
 
+### Step 5b: Bind the Exact Action
+
+Before a merge, publication, PR creation, or discard, capture the resolved target
+in task context rather than relying on an earlier generic intention.
+
+Record an Action Binding: named action, remote name and remote URL, remote ref or local target, full HEAD SHA, changed-path scope and clean-tree state, authorizing instruction, and branch/worktree ownership.
+
+Use `not applicable` for remote fields on local-only actions. For publication,
+resolve the configured remote to its actual URL and a full
+`refs/heads/<branch>` destination. A configured upstream may supply an unambiguous
+default; if multiple plausible remotes, refs, bases, or ownership scopes remain,
+ask rather than choosing a materially different target. Redact credentials when
+reporting a URL, while retaining the exact endpoint in the execution binding.
+
+Immediately before each external or destructive action, recheck the Action Binding; drift in action, HEAD, tree/scope, remote URL/ref, base, or ownership requires reauthorization for the new binding.
+
+The authorizing instruction may cover the completed result of the stated task,
+but it does not cover later adjacent changes, a different remote/ref, force push,
+PR creation after a push-only request, or deletion outside the confirmed scope.
+
 ### Step 6: Execute the Named Action
 
 Normalize an explicitly requested finishing action before execution. Never carry a bare menu number into this step.
@@ -191,37 +211,51 @@ After the merge and merged-result tests succeed:
 
 #### Shared branch publication for `push` and `publish_pr`
 
-Both actions begin with the same safe, non-force branch publication and remote verification.
+Both actions begin with the same safe, non-force branch publication and exact
+remote verification. Resolve and bind these values first:
+
+```bash
+REMOTE=<configured-remote>
+REMOTE_URL=$(git remote get-url "$REMOTE")
+REMOTE_BRANCH=<remote-branch>
+REMOTE_REF="refs/heads/$REMOTE_BRANCH"
+PUBLISHED_SHA=$(git rev-parse HEAD)
+```
 
 On a named branch:
 
 ```bash
-git push -u origin <feature-branch>
+LOCAL_BRANCH=$(git branch --show-current)
+test "$(git rev-parse "$LOCAL_BRANCH")" = "$PUBLISHED_SHA"
+git push -u "$REMOTE" "$LOCAL_BRANCH:$REMOTE_REF"
 ```
 
-On detached HEAD, select and report an explicit, non-conflicting `<new-branch>` name. Check the remote before publishing; if the name already exists, stop and choose another rather than overwriting it:
+On detached HEAD, select and report an explicit, non-conflicting new branch name.
+Check the exact ref before publication; if it already exists, stop and choose
+another rather than overwriting it:
 
 ```bash
-git ls-remote --heads origin refs/heads/<new-branch>
+git ls-remote --heads "$REMOTE_URL" "$REMOTE_REF"
 ```
 
-Use the actual permissions available in the workspace:
-
-- If local branch creation succeeds, create the branch and push it normally:
-  ```bash
-  git switch -c <new-branch>
-  git push -u origin <new-branch>
-  ```
-- If the host rejects local ref creation but permits remote publication, push the detached commit explicitly:
-  ```bash
-  git push origin HEAD:refs/heads/<new-branch>
-  ```
-
-Never force-push either path. Verify the remote branch exists:
+Publish the bound detached commit explicitly; creating a local branch is optional
+and must not be used to hide a changed commit identity:
 
 ```bash
-git ls-remote --exit-code --heads origin refs/heads/<remote-branch>
+test -z "$(git branch --show-current)"
+git push "$REMOTE" "$PUBLISHED_SHA:$REMOTE_REF"
 ```
+
+Never force-push either path. Read the exact remote ref back and compare it to the
+captured commit:
+
+```bash
+REMOTE_SHA=$(git ls-remote --exit-code "$REMOTE_URL" "$REMOTE_REF" | awk 'NR == 1 { print $1 }')
+test "$REMOTE_SHA" = "$PUBLISHED_SHA"
+test "$(git rev-parse HEAD)" = "$PUBLISHED_SHA"
+```
+
+A remote branch merely existing is insufficient; report publication only when the remote SHA exactly equals the pushed local SHA. If equality or the final HEAD check fails, report the mismatch and preserve the branch/worktree without claiming success.
 
 #### `push`
 

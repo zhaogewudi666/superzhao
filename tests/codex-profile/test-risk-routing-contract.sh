@@ -276,6 +276,11 @@ require_text docs/superpowers/evals/2026-07-15-superzhao-14-skills-behavior-evid
 require_text docs/superpowers/evals/2026-07-15-superzhao-14-skills-behavior-evidence.md '^\| Review delta \| D5 .*\| 8 \| 8 \| 0 \| valid follow-up \|' 'delta ledger retains all five correction samples'
 require_text docs/superpowers/evals/2026-07-15-superzhao-14-skills-behavior-evidence.md '^\| Baseline \| B1 .*\| 28 \| 21 \| 7 .*DBG-I' 'baseline ledger records all seven rejected decisions'
 require_text docs/superpowers/evals/2026-07-15-superzhao-14-skills-behavior-evidence.md 'B2.*INDETERMINATE|B3.*INDETERMINATE' 'baseline indeterminates remain visible and excluded'
+require_text docs/superpowers/evals/2026-07-15-superzhao-14-skills-behavior-evidence.md '08c8aebdfc41a67fdca7b023c614ef42a91173c9d7f03455691629f02fa7fa55' 'final behavior evidence binds the exact current profile'
+require_text docs/superpowers/evals/2026-07-15-superzhao-14-skills-behavior-evidence.md '^\| Current candidate \| E5 .*\| 12 \| 12 \| 0 \| valid fresh CLI sample \|' 'current candidate ledger retains all five fresh samples'
+require_text docs/superpowers/evals/2026-07-15-superzhao-14-skills-behavior-evidence.md '^## Raw Current-Profile Outputs' 'current candidate raw outputs are retained'
+reject_text docs/superpowers/evals/2026-07-15-superzhao-14-skills-behavior-evidence.md 'pending five fresh|no acceptance claim' 'current behavior evidence has no stale pending verdict'
+require_text docs/superpowers/evals/2026-07-15-superzhao-14-skills-behavior-evaluation.md '^Accept the current 14-Skill profile' 'evaluation report accepts only the freshly rerun current profile'
 
 require_text docs/superpowers/plans/2026-07-13-superzhao-codex-profile.md 'test-worktree-native-preference.*optional external harness.*not.*acceptance gate' 'plan marks upstream Claude behavior checks optional'
 reject_text docs/superpowers/plans/2026-07-13-superzhao-codex-profile.md '^bash tests/claude-code/test-worktree-native-preference\.sh$' 'plan removes external Claude behavior test from required gates'

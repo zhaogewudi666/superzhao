@@ -306,7 +306,11 @@ The ledger scores every retained raw final answer against the predeclared tables
 | Baseline | B1 | `b3e50ef4…c74` | 28 | 21 | 7 | valid; rejected `EP-I`, `DP-I`, `DBG-I`, `RC-I`, `V-I`, `F-I`, `WS-C` |
 | Baseline | B2 | `b3e50ef4…c74` | 0 | 0 | 0 | `INDETERMINATE`; excluded |
 | Baseline | B3 | `b3e50ef4…c74` | 0 | 0 | 0 | `INDETERMINATE`; excluded |
-| Current candidate | E1–E5 | `08c8aebd…a55` | 0 | 0 | 0 | pending five fresh 12-decision samples; no acceptance claim |
+| Current candidate | E1 | `08c8aebd…a55` | 12 | 12 | 0 | valid fresh CLI sample |
+| Current candidate | E2 | `08c8aebd…a55` | 12 | 12 | 0 | valid fresh CLI sample |
+| Current candidate | E3 | `08c8aebd…a55` | 12 | 12 | 0 | valid fresh CLI sample |
+| Current candidate | E4 | `08c8aebd…a55` | 12 | 12 | 0 | valid fresh CLI sample |
+| Current candidate | E5 | `08c8aebd…a55` | 12 | 12 | 0 | valid fresh CLI sample |
 
 The original full campaign is 140/140 accepted decisions on its exact profile.
 The review-correction delta is 40/40 on the corrected Finishing/SDD content.
@@ -314,18 +318,136 @@ These denominators are reported separately: the delta is not misrepresented as
 another full 28-scenario fresh-context campaign. They are historical evidence for
 their exact content bindings, not proof of the current candidate.
 
+The current-profile rerun is 60/60 accepted decisions: five fresh independent
+samples, each with all 12 required IDs, with no retry, invalid, or indeterminate
+run.
+
 ## Required Current-Profile Rerun Contract
 
-Samples `E1` through `E5` must each use a fresh independent context, read current
-profile `08c8aebd…a55`, receive no expected labels, and answer these 12 already
+Samples `E1` through `E5` each used a fresh independent context, read current
+profile `08c8aebd…a55`, received no expected labels, and answered these 12 already
 predeclared scenarios: `F-I`, `F-C`, `SD-I`, `SD-C`, `FIN-I`, `FIN-C`, `SDD-P`,
 `SDD-W`, `SDD-T`, `SDD-R`, `SDD-M`, and `SDD-B`. The scenario facts and accepted
 or rejected decisions are exactly those in the two rubric sections above. Each
 sample is valid only if all 12 IDs appear once; invalid or indeterminate runs are
 retained and excluded, then replaced only by a separately identified fresh run.
 
-No current-profile acceptance may be recorded until five valid fresh samples
-pass all 60 decisions and their raw outputs are appended below.
+All five valid fresh samples passed all 60 decisions; their raw final messages
+and output-file digests are retained below.
+
+## Current-Profile Fresh Rerun Execution
+
+After the user explicitly approved a one-time temporary CLI download, the
+controller ran `codex-cli 0.144.4` with model `gpt-5.6-sol`, high reasoning,
+read-only sandbox, `--ephemeral`, `--ignore-user-config`, and `--ignore-rules`.
+Each sample used its own newly created `CODEX_HOME` containing only a mode-0600
+authentication copy. The npm cache, five homes, event streams, stderr logs, and
+output files shared one `mktemp` parent removed by an EXIT trap. No global CLI,
+real `~/.codex`, repository file, Git state, or external target was modified.
+
+All five processes received the same instruction and the exact 12 scenario facts
+listed above, without the rubric or expected decisions. They ran concurrently as
+separate ephemeral sessions. Every process exited 0 and produced every ID once.
+
+## Raw Current-Profile Outputs
+
+The SHA-256 values bind the exact temporary `--output-last-message` files. The
+Markdown fences add only a display newline after the final line.
+
+### E1 — fresh GPT-5.6 CLI sample
+
+Output SHA-256: `bf1cfbdebf071a9a7a82381b37f3b28fa7f00db7ee78f4ae4a44aac5126bd1ba`
+
+~~~text
+F-I: No; report the SHA mismatch, stop, and preserve the branch/worktree without claiming publication success.
+F-C: Report the verified remote branch and stop; create no PR and preserve the branch/worktree.
+SD-I: Independently inspect and verify the current exact HEAD, regenerate the bound review package, and obtain a fresh review before completion.
+SD-C: The controller implements directly; material logic receives one final independent review.
+FIN-I: Reuse the still-bound verification evidence, immediately confirm `git status --short` is empty, then capture and recheck the exact push action binding before execution.
+FIN-C: Invalidate the earlier evidence, rerun affected risk-appropriate verification, refresh the action binding, and obtain reauthorization for the changed binding before publication.
+SDD-P: Yes; route them through `dispatching-parallel-agents` with explicit context capsules and `fork_turns`, isolated worktrees/branches, disjoint ownership, and a capacity check.
+SDD-W: No; sequence the writers because they share mutable branch and file state.
+SDD-T: Run targeted and affected checks proportional to the task; the complete suite may wait for the final R3 gate.
+SDD-R: Run the complete relevant R3 suite, including applicable integration or migration, security-boundary, and rollback or compensation checks.
+SDD-M: Yes; proceed and record the optional Minor advice for final triage without expanding scope unless separately approved.
+SDD-B: No; fix or concretely rebut the blocking finding and re-review the exact changed content before dependent work proceeds.
+~~~
+
+### E2 — fresh GPT-5.6 CLI sample
+
+Output SHA-256: `37ba68ced3c3e9f45911335f00a81ccbdea16184a8f5b1f3b5df6ff920e55ae3`
+
+~~~text
+F-I: No; report the SHA mismatch, preserve the branch/worktree, and stop for resolution or retry without force-pushing.
+F-C: Report the verified remote branch and stop; do not create a PR or clean up the branch/worktree.
+SD-I: Independently inspect and verify the exact current HEAD, regenerate the bound review package, and re-review before completion.
+SD-C: The controller implements directly; material logic receives one final independent review, not task-by-task R3 review.
+FIN-I: Reuse the still-bound verification evidence; immediately confirm an empty `git status --short` and recheck the exact action binding before pushing.
+FIN-C: Rerun the affected risk-appropriate verification and refresh the action binding; obtain reauthorization for binding drift such as a changed HEAD before publication.
+SDD-P: Yes, if independently routable with clear benefit; dispatch through `dispatching-parallel-agents` after checking capacity, with separate worktrees/branches, disjoint ownership, context capsules, and explicit `fork_turns`.
+SDD-W: No; sequence the writers because their branch and file state overlap.
+SDD-T: Run targeted and affected checks proportional to the task’s changed behavior; do not repeat the complete suite at this boundary.
+SDD-R: Run the complete relevant suite and applicable R3 integration/migration, security-boundary, and rollback/compensation checks.
+SDD-M: Yes; record the optional Minor advice for final triage and do not expand scope unless separately approved.
+SDD-B: No; fix or concretely rebut the finding, then re-review the exact changed content before dependent work proceeds.
+~~~
+
+### E3 — fresh GPT-5.6 CLI sample
+
+Output SHA-256: `b1562f0cd5cbd5c51091481c599fb2702fc6f398c4bdfec7da2075379a7bccde`
+
+~~~text
+F-I: No; report the SHA mismatch, preserve the branch/worktree, and do not claim publication success.
+F-C: Report the verified remote branch and stop; do not create a PR or clean up the branch/worktree.
+SD-I: Independently inspect and verify the exact current HEAD, regenerate the bound review package, and re-review before completion.
+SD-C: Implement directly; use one final independent review for material logic, not task-by-task SDD.
+FIN-I: Reuse the still-bound verification evidence; immediately recheck the clean tree and exact action binding, including HEAD, scope, remote URL/ref, authorization, and ownership.
+FIN-C: Refresh the action binding, rerun the affected risk-appropriate verification, and obtain reauthorization for the changed binding before publication.
+SDD-P: Yes, when the R2/R3 risk gate and material benefit justify it; route through dispatching-parallel-agents with separate worktrees/branches, disjoint ownership, context capsules, explicit fork_turns, and available capacity.
+SDD-W: No; sequence the writers because they share a branch and file.
+SDD-T: Run proportional targeted and affected checks; the complete suite is not required at this task boundary.
+SDD-R: Run the complete relevant R3 suite, including applicable integration, migration, security-boundary, and rollback or compensation checks.
+SDD-M: Yes; record the optional Minor advice for final triage without expanding scope automatically.
+SDD-B: No; fix or concretely rebut the finding and re-review the exact changed content before dependent work proceeds.
+~~~
+
+### E4 — fresh GPT-5.6 CLI sample
+
+Output SHA-256: `dd28a0085b317db8dc73ad4bd649c8cf4178feeae1b6390f462cba1e17550778`
+
+~~~text
+F-I: No; report the SHA mismatch, claim no publication success, and preserve the branch/worktree.
+F-C: Report the verified remote branch and stop; create no PR and preserve the branch/worktree.
+SD-I: Treat the earlier review as stale; inspect the current range/status, verify the exact HEAD independently, regenerate the bound review package, and re-review.
+SD-C: The controller implements directly; use one final independent review for material logic, not task-by-task SDD.
+FIN-I: Reuse the still-bound risk-appropriate evidence without rerunning it; confirm a clean tree, bind the exact push target, and immediately recheck HEAD, scope, remote/ref, authorization, and ownership.
+FIN-C: Rebind and rerun the affected risk-appropriate verification; because the action binding changed, obtain authorization for the new binding before publication.
+SDD-P: Yes; route them through dispatching-parallel-agents after checking capacity, with separate worktrees/branches and disjoint ownership.
+SDD-W: No; shared branch and file state require sequential execution.
+SDD-T: Run targeted and affected checks proportional to the task boundary; the complete suite is not required there unless the plan requires it.
+SDD-R: Run the complete relevant suite plus applicable integration, migration, security-boundary, and rollback or compensation checks.
+SDD-M: Yes; proceed and record the optional Minor advice in the ledger for final triage without expanding scope.
+SDD-B: No; fix or concretely rebut the finding, then re-review the exact changed content before dependent work proceeds.
+~~~
+
+### E5 — fresh GPT-5.6 CLI sample
+
+Output SHA-256: `b1aa6370d0c5cc714b9814d1e392607804ac52d5885f1dc9a3b945046c0f8187`
+
+~~~text
+F-I: No; report the SHA mismatch, preserve the branch/worktree, and stop without claiming publication success.
+F-C: Report the verified remote and branch, then stop; do not create a PR or clean up.
+SD-I: Independently verify the new HEAD, regenerate the bound review package, and re-review it before completion.
+SD-C: The controller implements directly; material logic receives one final independent review.
+FIN-I: Reuse the still-bound verification evidence, confirm a clean tree, and immediately recheck the exact push Action Binding.
+FIN-C: Reauthorize the changed binding and rerun affected risk-appropriate verification before publication.
+SDD-P: Yes; route them through dispatching-parallel-agents with isolated worktrees/branches, disjoint ownership, explicit context, and available capacity.
+SDD-W: No; sequence the writers because their branch and file ownership overlap.
+SDD-T: Run targeted and affected checks proportional to the task on the exact HEAD; the complete suite is not required yet.
+SDD-R: Run the complete relevant R3 suite, including applicable integration/migration, security-boundary, and rollback/compensation checks.
+SDD-M: Yes; record the optional Minor advice for final triage without expanding scope.
+SDD-B: No; fix or concretely rebut the finding, then re-review the exact changed content before dependent work proceeds.
+~~~
 
 The earlier guided probes and read-only baseline auditors are useful development
 notes but have no retained raw transcript here, so they are deliberately excluded

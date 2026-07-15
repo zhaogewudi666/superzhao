@@ -18,17 +18,18 @@ Auditable scenarios, rubric, per-sample ledger, and raw outputs:
 
 ## Decision
 
-Current behavioral acceptance is pending. Five fresh-context actors scored
-140/140 on the original profile, and five follow-up turns scored 40/40 on the
-intermediate Finishing/SDD delta. Independent review then found another material
-SDD wording conflict. Under `writing-skills`, neither earlier campaign proves the
-new candidate merely because its decisions look compatible.
+Accept the current 14-Skill profile. Five fresh, independent GPT-5.6 Sol CLI
+samples read exact profile `08c8aebd…a55` and each passed the original
+Finishing/SDD important and control cases plus all eight correction cases: 60
+accepted decisions out of 60 valid decisions. Every process exited 0; there was
+no retry, invalid run, or `INDETERMINATE` result.
 
-Acceptance therefore requires five fresh, independent, valid samples on the
-exact current profile. Each must answer the original Finishing/SDD important and
-control cases plus all eight correction cases (12 decisions per sample). Until
-those raw outputs and verdicts are recorded, this report does not claim the
-current Finishing/SDD behavior—or the integrated 14-Skill profile—is accepted.
+This rerun was required because material SDD wording changed after the earlier
+140/140 full campaign and 40/40 follow-up delta. Those historical results remain
+bound only to their exact profiles; current acceptance rests on the fresh 5×12
+campaign, static RED/GREEN contract, deterministic integration tests, and final
+independent review. Raw final messages and output-file SHA-256 values are in the
+linked evidence artifact.
 
 The candidate is also smaller overall: the 14 entrypoints changed from 22,051 to
 17,250 words, a reduction of 4,801 words (21.8%). Individual Skills were allowed
@@ -156,12 +157,19 @@ An isolated local CLI attempt targeted `gpt-5.6-sol` with
 `codex-cli 0.142.0`. Ten baseline/candidate requests all returned HTTP 400 because
 that model required a newer Codex client. None produced a model answer, so none
 was scored. Temporary `CODEX_HOME` directories and copied authentication files
-were removed by the cleanup trap. The CLI was not upgraded because that would
-have expanded the user's task and installation scope.
+were removed by the cleanup trap. The CLI was not upgraded at that stage because
+that would have expanded the user's task and installation scope.
 
 The valid behavior campaign instead used fresh collaboration actors in the
 current Codex App GPT-5.6 session. The exact server build identifier was not
 independently exposed to the controller.
+
+After final review made a current-profile rerun necessary, the user explicitly
+approved one temporary CLI download. Five independent ephemeral runs used
+`codex-cli 0.144.4`, `gpt-5.6-sol`, high reasoning, and a read-only sandbox. npm
+cache, authentication copies, event logs, and five separate `CODEX_HOME`
+directories lived under one temporary parent removed by an EXIT trap; neither
+the global CLI nor real `~/.codex` was changed.
 
 ## Limitations
 
@@ -171,6 +179,8 @@ independently exposed to the controller.
 - The valid full candidate campaign used five fresh actors. The correction delta
   reused those five actor threads in follow-up turns, so its 40 decisions are
   disclosed separately and are not called fresh-context samples.
+- The final current-profile campaign used five new ephemeral CLI contexts with
+  one byte-identical 12-scenario prompt and separately retained raw outputs.
 - The auditable baseline has one valid paired actor, not five; two attempts are
   visible as `INDETERMINATE`.
 - The original candidate actors used two semantically equivalent prompt
@@ -178,10 +188,10 @@ independently exposed to the controller.
   answers but not byte-exact spawn payloads.
 - Development-time guided probes and audits lack retained raw transcripts and
   are excluded from quantitative claims.
-- The CLI incompatibility and both incomplete baseline actors remain visible as
-  invalid/indeterminate evidence rather than being converted into passing runs.
+- The old-CLI incompatibility and both incomplete baseline actors remain visible
+  as invalid/indeterminate evidence rather than being converted into passing
+  runs; none is counted in the successful current-profile campaign.
 
-Within those limits, the earlier bound candidates consistently removed
-unnecessary ceremony while preserving approval, isolation, evidence,
-publication, and destructive-action boundaries. The current profile remains
-unaccepted until the fresh rerun contract above is satisfied.
+Within those limits, the current candidate consistently removed unnecessary
+ceremony while preserving approval, isolation, evidence, publication, and
+destructive-action boundaries.

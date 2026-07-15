@@ -21,40 +21,13 @@ A multi-part request is not by itself a reason to start parallel implementation 
 - **R1:** direct execution is the default; do not dispatch implementation writers merely because the request has several parts.
 - **R2/R3:** Dispatch in parallel only when tasks belong to independent domains and the reliability benefit is clear; otherwise keep the work with one agent or sequence it.
 
-The current team limit is 4 total agents including the controller; a controller may run at most 3 child agents concurrently, and fewer when other live agents already occupy slots. Check live capacity before every dispatch batch.
+Detect runtime capacity and current live agents before every dispatch batch. Use only available slots and reduce the batch when the tool reports a lower limit; never encode one harness's topology as a universal rule.
 
 Implementation writers that share a checkout, branch, or files must not run in parallel. Give writers separate isolated worktrees with disjoint ownership, or sequence them. Read-only investigation can share a checkout only when it cannot mutate generated files, caches, locks, or other state.
 
 ## When to Use
 
-```dot
-digraph when_to_use {
-    "Multiple failures?" [shape=diamond];
-    "Are they independent?" [shape=diamond];
-    "Single agent investigates all" [shape=box];
-    "One agent per problem domain" [shape=box];
-    "Can they work in parallel?" [shape=diamond];
-    "Sequential agents" [shape=box];
-    "Parallel dispatch" [shape=box];
-
-    "Multiple failures?" -> "Are they independent?" [label="yes"];
-    "Are they independent?" -> "Single agent investigates all" [label="no - related"];
-    "Are they independent?" -> "Can they work in parallel?" [label="yes"];
-    "Can they work in parallel?" -> "Parallel dispatch" [label="yes"];
-    "Can they work in parallel?" -> "Sequential agents" [label="no - shared state"];
-}
-```
-
-**Use when:**
-- 3+ test files failing with different root causes
-- Multiple subsystems broken independently
-- Each problem can be understood without context from others
-- No shared state between investigations
-
-**Don't use when:**
-- Failures are related (fix one might fix others)
-- Need to understand full system state
-- Agents would interfere with each other
+Use parallel agents only when domains can be understood independently, simultaneous work has a material reliability or latency benefit, and their reads or writes cannot interfere. Sequence related failures, dependent tasks, shared external state, or work that needs one coherent system model.
 
 ## The Pattern
 
@@ -67,14 +40,9 @@ Group failures by what's broken:
 
 Each domain is independent - fixing tool approval doesn't affect abort tests.
 
-### 2. Create Focused Agent Tasks
+### 2. Create Context Capsules
 
-Each agent gets:
-- **Specific scope:** One test file or subsystem
-- **Clear goal:** Make these tests pass
-- **Constraints:** Don't change other code
-- **Expected output:** Summary of what you found and fixed
-- **Context window:** An explicit `fork_turns` choice
+Every task gets a **Context Capsule**: capability, goal, inputs, invariants, owned paths, expected artifacts, evidence, authorization, and a deliberate `fork_turns` choice. Include only the context needed to satisfy that contract.
 
 Before dispatching implementation writers, assign each a separate isolated worktree and branch plus an owned file scope, and put those exact boundaries in the prompt. If separate isolation is unavailable, dispatch read-only investigators or run the writers sequentially.
 
@@ -100,107 +68,29 @@ spawn_agent(task_name="fix_approval", message="In isolated worktree <approval-pa
 ### 4. Review and Integrate
 
 When agents return:
-- Read each summary
-- Verify fixes don't conflict
-- Run full test suite
-- Integrate all changes
+- A child report is not proof; the controller inspects the actual diff, current evidence, and ownership boundaries
+- Verify fixes do not conflict and run the integration-appropriate checks
+- Integrate only the verified artifacts
 
 ## Agent Prompt Structure
 
-Good agent prompts are:
-1. **Focused** - One clear problem domain
-2. **Context-complete** - The message plus the chosen inherited window contains what the task needs
-3. **Specific about output** - What should the agent return?
-
 ```markdown
-Fix the 3 failing tests in src/agents/agent-tool-abort.test.ts:
-
-1. "should abort tool with partial output capture" - expects 'interrupted at' in message
-2. "should handle mixed completed and aborted tools" - fast tool aborted instead of completed
-3. "should properly track pendingToolCount" - expects 3 results but gets 0
-
-These are timing/race condition issues. Your task:
-
-1. Read the test file and understand what each test verifies
-2. Identify root cause - timing issues or actual bugs?
-3. Fix by:
-   - Replacing arbitrary timeouts with event-based waiting
-   - Fixing bugs in abort implementation if found
-   - Adjusting test expectations if testing changed behavior
-
-Do NOT just increase timeouts - find the real issue.
-
-Return: Summary of what you found and what you fixed.
+Capability: [investigate | implement | review | verify]
+Goal: [one observable outcome]
+Inputs: [paths, failures, source state]
+Invariants: [behavior and safety boundaries]
+Owned paths/state: [exact write ownership, or read-only]
+Expected artifacts: [patch, findings, proof]
+Evidence: [commands or observations required]
+Authorization: [allowed actions and explicit exclusions]
+Context inheritance: fork_turns=[none | N | all] because [reason]
 ```
 
-## Common Mistakes
+## Guardrails
 
-**❌ Too broad:** "Fix all the tests" - agent gets lost
-**✅ Specific:** "Fix agent-tool-abort.test.ts" - focused scope
+- Do not split related failures merely because they appear in different files.
+- Do not let multiple writers share a checkout, branch, owned path, lock, generated output, or external target.
+- Do not use a broad prompt to compensate for unclear task boundaries; investigate the dependency first.
+- Do not accept a summary as integration proof or let a child perform an unauthorized external action.
 
-**❌ No context:** "Fix the race condition" - agent doesn't know where
-**✅ Context:** Paste the error messages and test names
-
-**❌ No constraints:** Agent might refactor everything
-**✅ Constraints:** "Do NOT change production code" or "Fix tests only"
-
-**❌ Vague output:** "Fix it" - you don't know what changed
-**✅ Specific:** "Return summary of root cause and changes"
-
-## When NOT to Use
-
-**Related failures:** Fixing one might fix others - investigate together first
-**Need full context:** Understanding requires seeing entire system
-**Exploratory debugging:** You don't know what's broken yet
-**Shared state:** Agents would interfere (editing same files, using same resources)
-
-## Real Example from Session
-
-**Scenario:** 6 test failures across 3 files after major refactoring
-
-**Failures:**
-- agent-tool-abort.test.ts: 3 failures (timing issues)
-- batch-completion-behavior.test.ts: 2 failures (tools not executing)
-- tool-approval-race-conditions.test.ts: 1 failure (execution count = 0)
-
-**Decision:** Independent domains - abort logic separate from batch completion separate from race conditions. Each writer receives a separate isolated worktree/branch and disjoint file ownership.
-
-**Dispatch:**
-```
-Agent 1 → Fix agent-tool-abort.test.ts
-Agent 2 → Fix batch-completion-behavior.test.ts
-Agent 3 → Fix tool-approval-race-conditions.test.ts
-```
-
-**Results:**
-- Agent 1: Replaced timeouts with event-based waiting
-- Agent 2: Fixed event structure bug (threadId in wrong place)
-- Agent 3: Added wait for async tool execution to complete
-
-**Integration:** All fixes independent, no conflicts, full suite green
-
-**Time saved:** 3 problems solved in parallel vs sequentially
-
-## Key Benefits
-
-1. **Parallelization** - Multiple investigations happen simultaneously
-2. **Focus** - Each agent has narrow scope, less context to track
-3. **Independence** - Agents don't interfere with each other
-4. **Speed** - 3 problems solved in time of 1
-
-## Verification
-
-After agents return:
-1. **Review each summary** - Understand what changed
-2. **Check for conflicts** - Did agents edit same code?
-3. **Run full suite** - Verify all fixes work together
-4. **Spot check** - Agents can make systematic errors
-
-## Real-World Impact
-
-From debugging session (2025-10-03):
-- 6 failures across 3 files
-- 3 agents dispatched in parallel
-- All investigations completed concurrently
-- All fixes integrated successfully
-- Zero conflicts between agent changes
+After children return, inspect their actual artifacts and current state, resolve overlap, and run the checks needed for the integrated claim. The controller owns the final result.

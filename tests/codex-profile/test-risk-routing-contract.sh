@@ -86,6 +86,10 @@ require_text skills/using-superpowers/references/risk-levels.md 'separate action
 require_text skills/using-superpowers/SKILL.md 'risk-levels\.md' 'bootstrap routes through the shared risk reference'
 require_text skills/using-superpowers/SKILL.md 'user names it' 'bootstrap loads explicitly named skills'
 require_text skills/using-superpowers/SKILL.md 'description clearly matches' 'bootstrap loads clearly matching skills'
+require_text skills/using-superpowers/SKILL.md 'stated outcome.*boundaries' 'bootstrap starts from the user outcome and boundaries'
+require_text skills/using-superpowers/SKILL.md 'work shape.*clear.*ambiguous.*coordinated.*independent' 'bootstrap separates work shape from action risk'
+require_text skills/using-superpowers/SKILL.md 'consequential.*constraints.*invariants.*completion evidence.*(exclusions|out-of-scope).*authorization' 'bootstrap makes consequential task boundaries explicit'
+require_text skills/using-superpowers/SKILL.md 'Announce.*only when.*changes the next action.*adds a gate' 'bootstrap announces only behavior-changing skills'
 reject_text skills/using-superpowers/SKILL.md '1% chance' 'bootstrap removes one-percent trigger'
 
 require_text skills/brainstorming/SKILL.md 'material(ly)? ambiguous' 'brainstorming triggers on material ambiguity'

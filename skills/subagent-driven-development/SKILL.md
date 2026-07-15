@@ -141,6 +141,10 @@ After review, verify every Critical and Important finding is either fixed and
 re-reviewed or rebutted with concrete code/test evidence. A subagent report is
 input to this gate, never proof by itself.
 
+Critical, Important, and required spec-compliance gaps block the dependent task
+until resolved and re-reviewed. Minor advice is recorded for final triage; it
+does not authorize unrelated scope or block independent work by itself.
+
 For each handoff, record the brief, report, and review package content digest plus the full commit SHA; paths and short SHAs are labels, not identity. When review returns, recheck every binding. If HEAD or any bound artifact changed, regenerate the package and re-review before marking the task verified.
 
 ## Constructing Reviewer Prompts
@@ -263,14 +267,14 @@ a ledger file, not only in todos.
 **Never:**
 - Start implementation on main/master branch without explicit user consent
 - Skip task review, or accept a report missing either verdict (spec compliance AND task quality are both required)
-- Proceed with unfixed issues
-- Dispatch multiple implementation subagents in parallel (conflicts)
+- Proceed while Critical, Important, or required spec-compliance gaps remain open on the dependent task
+- Dispatch multiple implementation writers into shared mutable checkout, branch, files, or external state; multiple implementation writers may run in separate worktrees and branches with disjoint ownership only through `dispatching-parallel-agents`
 - Make a subagent read the whole plan file (hand it its task brief —
   `scripts/task-brief` — instead)
 - Skip scene-setting context (subagent needs to understand where task fits)
 - Ignore subagent questions (answer before letting them proceed)
 - Accept "close enough" on spec compliance (reviewer found spec issues = not done)
-- Skip review loops (reviewer found issues = implementer fixes = review again)
+- Skip review loops for blocking Critical, Important, or required spec-compliance findings (fix or rebut with evidence, then review again)
 - Let implementer self-review replace actual review (both are needed)
 - Tell a reviewer what not to flag, or pre-rate a finding's severity in the
   dispatch prompt ("treat it as Minor at most") — the plan's example code is

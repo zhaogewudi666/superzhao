@@ -123,7 +123,9 @@ Map the response immediately, before execution:
 
 ### Step 5: Apply the Action-Specific Gate
 
-The `merge`, `push`, and `publish_pr` actions require fresh tests and a clean committed tree before execution: `git status --short` must be empty both before and after the test command. Run the project's relevant test command and record its current output. A dirty tree or failure blocks only the selected integration or publication action; report the evidence and preserve the branch/worktree.
+The `merge`, `push`, and `publish_pr` actions require current content-bound verification evidence appropriate to the action risk. When the verification binding is unchanged, reuse that evidence; elapsed messages or reaching this workflow do not invalidate it. After any verification binding drift, rerun the affected evidence before execution. The binding includes the exact content/HEAD, changed scope, relevant environment and external state, and the claim being supported.
+
+For these actions, `git status --short` must be empty immediately before execution. A dirty tree changes the binding and blocks only the selected integration or publication action; report the evidence and preserve the branch/worktree. A merge creates a new content state, so verify the merged result before claiming integration success.
 
 The `keep` action does not require tests. Proceed directly to its reporting behavior even when tests are failing or unavailable.
 
@@ -354,11 +356,11 @@ Do not run repository-wide stale-registration cleanup automatically. A normal `g
 | User requested a specific finishing action | Identify it, detect state/ownership, then apply only that action's gate |
 | Neither condition applies | Stop; do not present a finishing menu |
 
-| Named action | Fresh tests? | Result | Branch/worktree handling |
+| Named action | Verification gate | Result | Branch/worktree handling |
 |--------------|--------------|--------|--------------------------|
-| `merge` | Required before action and again on merged result | Merge locally | Clean up only task-owned worktree/branch after success |
-| `push` | Required before action | Publish and verify the remote branch; do not create a PR | Preserve branch and worktree |
-| `publish_pr` | Required before action | Push, create PR, verify and report URL | Preserve branch and worktree |
+| `merge` | Current bound evidence before action; verify the new merged result | Merge locally | Clean up only task-owned worktree/branch after success |
+| `push` | Current bound evidence; rerun after binding drift | Publish and verify the remote branch; do not create a PR | Preserve branch and worktree |
+| `publish_pr` | Current bound evidence; rerun after binding drift | Push, create PR, verify and report URL | Preserve branch and worktree |
 | `keep` | Not required | Leave work as-is | Preserve branch and worktree |
 | `discard` | Not required | Inspect state, require exact confirmation, then discard | Clean up only task-owned state; preserve and report harness-owned state |
 
@@ -366,7 +368,7 @@ Do not run repository-wide stale-registration cleanup automatically. A normal `g
 
 **Testing before selecting an action**
 - **Problem:** Failing tests prevent a user from keeping or explicitly discarding work
-- **Fix:** Identify the action first; require fresh tests only for `merge`, `push`, and `publish_pr`
+- **Fix:** Identify the action first; apply the current-evidence gate only to `merge`, `push`, and `publish_pr`
 
 **Open-ended questions**
 - **Problem:** "What should I do next?" is ambiguous
@@ -415,7 +417,7 @@ Do not run repository-wide stale-registration cleanup automatically. A normal `g
 ## Red Flags
 
 **Never:**
-- Execute `merge`, `push`, or `publish_pr` without fresh passing tests
+- Execute `merge`, `push`, or `publish_pr` without current, risk-appropriate evidence bound to the exact action content
 - Let failing tests block `keep` or confirmed `discard`
 - Present a finishing menu for work that neither created nor managed a branch/worktree
 - Merge without verifying tests on result

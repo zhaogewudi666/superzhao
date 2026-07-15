@@ -1,5 +1,9 @@
 {
   "schema": "superzhao.approval-record/v1",
+  "status": "superseded",
+  "executable": false,
+  "superseded_by": "2026-07-15 user scope override",
+  "supersession_note": "Task 2B/2C installation-platform, bound-plan, journal, and SIGKILL recovery work was canceled. This record is retained only as historical audit context.",
   "recorded_at": "2026-07-14T10:30:49Z",
   "authorizer": "workspace user",
   "source": {
@@ -11,12 +15,12 @@
     "sha256": "9bc340d0bb7100bfee6f4d7040188a7a59441514587b06464915699c64d76331",
     "base_commit": "e8e5a618d7f1bfa4b88ec298c8c500e2fda42295"
   },
-  "authorized_publish_target": {
+  "historical_authorized_publish_target": {
     "repository_url": "https://github.com/zhaogewudi666/superzhao.git",
     "destination_ref": "refs/heads/main",
     "mode": "ordinary non-force push after verified local integration"
   },
-  "authorized_scope": [
+  "historical_authorized_scope": [
     "implement the bound Superzhao Adaptive Control Plane v2 design in this repository",
     "update the existing managed Superzhao Skills in the local Codex profile after verification and backup",
     "create ordinary local commits for this scope",
@@ -29,7 +33,8 @@
     "destructive cleanup of user-owned branches, worktrees, files, or backups",
     "publish scope not contained in the bound design"
   ],
-  "execution_condition": "Recheck the final action, remote URL, destination ref, HEAD, profile digest, and changed-path scope at the point of installation or push. Material drift invalidates this record for that action.",
+  "execution_condition": "Non-executable: this superseded record cannot authorize installation, implementation, or publication.",
+  "historical_execution_condition": "Recheck the final action, remote URL, destination ref, HEAD, profile digest, and changed-path scope at the point of installation or push. Material drift invalidates this record for that action.",
   "provenance": {
     "recorded_by": "Codex desktop controller",
     "model": "GPT-5-class system identity; exact deployment identifier not exposed to the controller",

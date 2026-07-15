@@ -1,5 +1,13 @@
 # Superzhao Adaptive Control Plane v2 Implementation Plan
 
+> **SUPERSEDED — HISTORICAL, NON-EXECUTABLE.** The user's 2026-07-15 scope
+> override canceled the installation platform, bound plan, journal, and SIGKILL
+> recovery work. Task 2B/2C and their unchecked descendants must not be executed.
+> Only the already-retained timeout support, Task 2A profile-integrity work, the
+> 14-Skill behavior optimization/evaluation, and final use of the repository's
+> existing backup/rollback scripts remain in scope. The checkboxes below are a
+> historical snapshot, not a live task list.
+
 > **Required execution:** use `subagent-driven-development` at meaningful R3
 > boundaries, keep implementation writers serialized in this checkout, and use
 > `verification-before-completion` before every commit or success claim.

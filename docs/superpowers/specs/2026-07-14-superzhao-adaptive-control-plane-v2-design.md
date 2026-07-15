@@ -1,7 +1,14 @@
 # Superzhao Adaptive Control Plane v2
 
+> **SUPERSEDED — HISTORICAL, NON-EXECUTABLE.** The 2026-07-15 user scope override
+> canceled Task 2B/2C installation-platform, bound-plan, journal, and SIGKILL
+> recovery work. Only timeout support, Task 2A profile integrity, and the 14-Skill
+> behavior optimization were retained. The design below records the earlier
+> proposal; its unimplemented control-plane provisions are not authorization or
+> pending work and must not be resumed.
+
 **Date:** 2026-07-14
-**Status:** Approved direction; bound approval record present; implementation evidence pending
+**Status:** Superseded historical proposal; non-executable since 2026-07-15
 **Risk:** R3 — this changes the behavior-shaping profile installed into Codex
 **Base:** `e8e5a618d7f1bfa4b88ec298c8c500e2fda42295`
 

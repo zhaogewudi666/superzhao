@@ -7,9 +7,7 @@ description: Use when approved high-risk work (R3), three or more dependent impl
 
 ## Overview
 
-Write implementation plans assuming the engineer has zero context for our codebase. Document which files each task touches, the behavior it delivers, dependencies and interfaces between tasks, and how to verify it. Organize the work into coherent, independently verifiable tasks. DRY. YAGNI. TDD.
-
-Assume they are a skilled developer, but know almost nothing about our toolset or problem domain. Assume they don't know good test design very well.
+Write a living plan that carries the context an implementer cannot safely derive: intended behavior, dependencies, outputs, boundaries, and proof obligations. Organize work into coherent, independently verifiable tasks. DRY. YAGNI. TDD.
 
 ## Plan Gate
 
@@ -22,29 +20,13 @@ Write a plan for R3 work and for R2 work with at least three dependent steps or 
 **Save plans to:** `docs/superpowers/plans/YYYY-MM-DD-<feature-name>.md`
 - (User preferences for plan location override this default)
 
-## Scope Check
+## Scope and Structure
 
-If the source requirements (an approved written spec for R3 or a brief or inline design for R2) cover multiple independent subsystems, they should have been broken into sub-projects during brainstorming. If they weren't, suggest separate plans — one per subsystem. Each plan should produce working, testable software on its own.
+If the source requirements span independent subsystems, use separate plans that each deliver working, testable behavior. Map expected files, responsibilities, and interfaces before defining tasks, but treat the map as the best current decomposition rather than a frozen detail. Follow established codebase patterns; include structural cleanup only when it directly enables the planned outcome.
 
-## File Structure
+## Task Boundaries
 
-Before defining tasks, map out which files will be created or modified and what each one is responsible for. This is where decomposition decisions get locked in.
-
-- Design units with clear boundaries and well-defined interfaces. Each file should have one clear responsibility.
-- You reason best about code you can hold in context at once, and your edits are more reliable when files are focused. Prefer smaller, focused files over large ones that do too much.
-- Files that change together should live together. Split by responsibility, not by technical layer.
-- In existing codebases, follow established patterns. If the codebase uses large files, don't unilaterally restructure - but if a file you're modifying has grown unwieldy, including a split in the plan is reasonable.
-
-This structure informs the task decomposition. Each task should produce self-contained changes that make sense independently.
-
-## Task Right-Sizing
-
-A task is the smallest coherent unit that carries its own verification cycle.
-For R3, each meaningful task boundary is worth a fresh reviewer's gate. R2 task boundaries support coherent delivery and one final review, not a mandatory task-level review gate. When drawing task boundaries: fold setup, configuration, scaffolding, and documentation steps into the task whose deliverable needs them; split only where separate verification or, for R3, review could meaningfully reject one task while approving its neighbor. Each task ends with an independently verifiable deliverable and clear evidence that it works.
-
-## Coherent Task Granularity
-
-Plan at the level of coherent, independently verifiable tasks, not mandatory 2-5 minute mechanical steps. Within each task, describe the test cycle and implementation actions needed to reach one reviewable outcome. Keep tightly coupled setup, test, implementation, documentation, and verification work together; split work when the resulting deliverables can be understood, verified, and reviewed independently.
+A task is the smallest coherent outcome with its own verification cycle. Fold tightly coupled setup, tests, implementation, documentation, and verification together; split only when neighboring outputs can be understood and rejected independently. R2 task boundaries support coherent delivery and one final review, not a task-level review gate. R3 keeps meaningful task-boundary review.
 
 ## Precision by Risk and Ambiguity
 
@@ -52,7 +34,7 @@ Give exact file paths, affected symbols, observable behavior, and verification e
 
 ## Commit Boundaries
 
-Commit at coherent, reviewable boundaries. A commit may contain the tightly coupled mechanical actions needed to produce one independently verifiable outcome; do not create a commit after every mechanical action or combine unrelated reviewable outcomes.
+Commit each coherent, independently verifiable outcome; neither commit every mechanical action nor combine unrelated outcomes.
 
 ## Plan Document Header
 
@@ -61,7 +43,7 @@ Commit at coherent, reviewable boundaries. A commit may contain the tightly coup
 ```markdown
 # [Feature Name] Implementation Plan
 
-> **For agentic workers:** Follow the risk-specific execution route recorded in the Risk Level field below. R2 defaults to direct execution with one final review for material logic. R3 defaults to superpowers:subagent-driven-development when subagents are available; otherwise use superpowers:executing-plans with the complete R3 gates. Tasks use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** Follow the risk-specific execution route recorded in the Risk Level field below. R2 defaults to direct execution with one final review for material logic. R3 defaults to superpowers:subagent-driven-development when subagents are available; otherwise use superpowers:executing-plans with the complete R3 gates. Task checkboxes are a tracking view, never completion evidence.
 
 **Goal:** [One sentence describing what this builds]
 
@@ -70,6 +52,10 @@ Commit at coherent, reviewable boundaries. A commit may contain the tightly coup
 **Tech Stack:** [Key technologies/libraries]
 
 **Risk Level:** [R2 | R3] — [one-sentence justification based on the requested action and its consequences]
+
+**Source requirements:** [path or inline-design identifier] — content digest [digest]; base commit or state [identifier]
+
+**Owned scope:** [files, components, and explicit exclusions]
 
 ## Global Constraints
 
@@ -83,8 +69,16 @@ include this section.]
 
 ## Task Structure
 
+Every task records `Depends on`, `Produces`, and `Completion evidence`; the latter is filled from observed results during execution, not predicted at planning time.
+
 ````markdown
 ### Task N: [Component Name]
+
+**Status:** pending | in progress | verified
+
+**Depends on:** [task outputs or source state required before this task]
+
+**Produces:** [observable behavior and artifacts made available to later tasks]
 
 **Files:**
 - Create: `exact/path/to/file.py`
@@ -106,8 +100,18 @@ include this section.]
 
 **Commit boundary:** This task produces [independently reviewable outcome].
 
+**Completion evidence:** [commit or tree state plus the exact verification command and observed result; leave as `not run` while pending]
+
+**Execution updates:** [record any non-material adjustment with its reason and evidence]
+
 Commit the named files with `[specific commit message]` once the task's verification passes. If this outcome is inseparable from an adjacent task, state the shared boundary and commit them together.
 ````
+
+## Living Updates
+
+Update the plan when repository facts differ from planning assumptions. Renamed internal symbols, equivalent commands, or adjusted file paths are non-material adaptations when they preserve goal, scope, interfaces, invariants, risk, and authorization; record the adjustment, reason, and evidence, then continue. Stop and return to the appropriate approval gate when any of those boundaries changes materially.
+
+Checkboxes summarize task tracking; they are not evidence. A task is verified only when its declared output and completion evidence match the current tree and dependencies.
 
 ## No Placeholders
 
@@ -120,7 +124,7 @@ Every task must contain the actual content an engineer needs. These are **plan f
 - References to types, functions, or methods not defined in any task
 
 ## Remember
-- Exact file paths always
+- Expected file paths and affected symbols; make them exact where ambiguity would create rework
 - Exact cross-task interfaces and migration details where ambiguity would create rework
 - Exact code only for an otherwise ambiguous interface, migration, fragile algorithm, or non-obvious command
 - Exact verification commands with expected output or other deterministic evidence
@@ -128,15 +132,12 @@ Every task must contain the actual content an engineer needs. These are **plan f
 
 ## Self-Review
 
-After writing the complete plan, look at the source requirements with fresh eyes and check the plan against them. For R3, the source is the approved written spec; for R2, it may be a brief or inline design. This is a checklist you run yourself — not a subagent dispatch.
+Compare the complete plan with its bound source and fix gaps before handoff:
 
-**1. Requirements coverage:** Skim each source requirement. Can you point to a task that implements it? List any gaps.
-
-**2. Placeholder scan:** Search your plan for red flags — any of the patterns from the "No Placeholders" section above. Fix them.
-
-**3. Type consistency:** Do the types, method signatures, and property names you used in later tasks match what you defined in earlier tasks? A function called `clearLayers()` in Task 3 but `clearFullLayers()` in Task 7 is a bug.
-
-If you find issues, fix them inline. No need to re-review — just fix and move on. If you find a source requirement with no task, add the task.
+1. Every source requirement maps to a task and no task adds unrequested scope.
+2. No placeholders or undefined cross-task interfaces remain.
+3. Dependencies, produced names, types, and verification commands agree across tasks.
+4. Risk route, owned scope, base state, and source digest are present and current.
 
 ## Execution Handoff
 

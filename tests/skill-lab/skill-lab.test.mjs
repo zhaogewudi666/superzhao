@@ -1598,13 +1598,21 @@ test("CLI contains no adoption, transcript harvesting, provider, or network path
     "node:https",
     "node:net",
     "node:tls",
-    "node:child_process",
     "process.env",
     ".claude",
     "fetch(",
   ]) {
     assert.doesNotMatch(source, new RegExp(forbidden.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   }
+  assert.equal(
+    source.match(/node:child_process/g)?.length,
+    1,
+    "the only child-process capability is the anchored internal publisher",
+  );
+  assert.equal(source.match(/\bspawnSync\(/g)?.length, 1);
+  assert.match(source, /spawnSync\(\s*process\.execPath,/);
+  assert.match(source, /env: \{\}/, "the internal child must not inherit NODE_OPTIONS");
+  assert.doesNotMatch(source, /\bshell\s*:/, "the internal child must not invoke a shell");
   const result = run(["adopt"]);
   assert.equal(result.status, 2);
   assert.match(result.stderr, /unknown command/);

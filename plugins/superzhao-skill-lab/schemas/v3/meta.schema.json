@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://superzhao.dev/schemas/skill-lab/v3/meta.schema.json",
+  "$dynamicAnchor": "meta",
+  "$vocabulary": {
+    "https://json-schema.org/draft/2020-12/vocab/core": true,
+    "https://json-schema.org/draft/2020-12/vocab/applicator": true,
+    "https://json-schema.org/draft/2020-12/vocab/unevaluated": true,
+    "https://json-schema.org/draft/2020-12/vocab/validation": true,
+    "https://json-schema.org/draft/2020-12/vocab/meta-data": true,
+    "https://json-schema.org/draft/2020-12/vocab/format-annotation": true,
+    "https://json-schema.org/draft/2020-12/vocab/content": true,
+    "https://superzhao.dev/schemas/skill-lab/v3/vocab/utf8-bytes/v1": true
+  },
+  "title": "Superzhao Skill Lab v3 dialect",
+  "$comment": "The dynamic meta anchor makes the custom keyword constraint apply when the standard applicator meta-schemas recurse into nested subschemas.",
+  "allOf": [
+    {
+      "$ref": "https://json-schema.org/draft/2020-12/schema"
+    },
+    {
+      "type": ["object", "boolean"],
+      "properties": {
+        "x-maxUtf8Bytes": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    }
+  ]
+}

@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import { spawnSync } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
 import {
   closeSync,
@@ -17,7 +18,7 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
+import { basename, dirname, isAbsolute, relative, resolve, sep } from "node:path";
 
 const HARD_MAX_EDITS = 4;
 const HARD_MAX_EDIT_BYTES = 4096;
@@ -29,6 +30,222 @@ const MAX_SAMPLE_ROWS = 1000;
 const MIN_REQUIRED_VALID = 5;
 const MAX_REQUIRED_VALID = 20;
 const PATCH_SCHEMA_V3 = "superzhao.skill-lab.patch/v3";
+const ANCHORED_PUBLISHER_PROTOCOL = "superzhao.skill-lab.anchored-publisher/v1";
+const ANCHORED_PUBLISHER_SOURCE = String.raw`
+"use strict";
+const {
+  closeSync,
+  constants,
+  fstatSync,
+  linkSync,
+  lstatSync,
+  openSync,
+  readFileSync,
+  unlinkSync,
+  writeFileSync,
+} = require("node:fs");
+
+const PROTOCOL = "superzhao.skill-lab.anchored-publisher/v1";
+
+class PublisherError extends Error {
+  constructor(status, message) {
+    super(message);
+    this.status = status;
+  }
+}
+
+function fail(status, message) {
+  throw new PublisherError(status, message);
+}
+
+function requireBasename(value, label) {
+  if (typeof value !== "string" || value.length === 0 || value === "." || value === ".."
+      || value.includes("/") || value.includes("\0")) {
+    fail("unsafe_path_or_integrity", label + " must be a relative basename");
+  }
+  return value;
+}
+
+function parseIdentity(value, label) {
+  if (!value || typeof value !== "object"
+      || !/^(0|[1-9][0-9]*)$/.test(value.dev)
+      || !/^(0|[1-9][0-9]*)$/.test(value.ino)) {
+    fail("unsafe_path_or_integrity", label + " identity is malformed");
+  }
+  const identity = { dev: BigInt(value.dev), ino: BigInt(value.ino) };
+  if (identity.ino === 0n) fail("unsafe_path_or_integrity", label + " inode is unavailable");
+  return identity;
+}
+
+function sameIdentity(stat, expected) {
+  return stat.dev === expected.dev && stat.ino === expected.ino && stat.ino !== 0n;
+}
+
+function lstatRelative(name) {
+  try {
+    return lstatSync(name, { bigint: true });
+  } catch (error) {
+    if (error && error.code === "ENOENT") return null;
+    throw error;
+  }
+}
+
+function anchorWorkingDirectory(request) {
+  const expected = parseIdentity(request.expected_parent, "output parent");
+  let descriptor;
+  try {
+    descriptor = openSync(
+      ".",
+      constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW,
+    );
+    const actual = fstatSync(descriptor, { bigint: true });
+    if (!actual.isDirectory() || !sameIdentity(actual, expected)) {
+      fail(
+        "unsafe_path_or_integrity",
+        "output parent working-directory identity does not match the verified parent",
+      );
+    }
+  } finally {
+    if (descriptor !== undefined) closeSync(descriptor);
+  }
+}
+
+function requireOwned(name, expected, label) {
+  const stat = lstatRelative(name);
+  if (!stat || stat.isSymbolicLink() || !stat.isFile() || !sameIdentity(stat, expected)) {
+    fail("unsafe_path_or_integrity", label + " physical identity changed");
+  }
+  return stat;
+}
+
+function unlinkOwned(name, expected) {
+  const stat = lstatRelative(name);
+  if (!stat || stat.isSymbolicLink() || !stat.isFile() || !sameIdentity(stat, expected)) {
+    return "foreign";
+  }
+  unlinkSync(name);
+  return "removed";
+}
+
+function createTemporary(request) {
+  const name = requireBasename(request.name, "temporary source");
+  if (typeof request.content !== "string") {
+    fail("publication_failure", "temporary source content is malformed");
+  }
+  const bytes = Buffer.from(request.content, "base64");
+  if (bytes.toString("base64") !== request.content) {
+    fail("publication_failure", "temporary source content is not canonical base64");
+  }
+  anchorWorkingDirectory(request);
+  let descriptor;
+  let identity;
+  let failure;
+  try {
+    descriptor = openSync(
+      name,
+      constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW,
+      0o600,
+    );
+    const before = fstatSync(descriptor, { bigint: true });
+    if (!before.isFile() || before.ino === 0n) {
+      fail("unsafe_path_or_integrity", "temporary source is not a regular file");
+    }
+    identity = { dev: before.dev, ino: before.ino };
+    writeFileSync(descriptor, bytes);
+    const after = fstatSync(descriptor, { bigint: true });
+    if (!sameIdentity(after, identity)) {
+      fail("unsafe_path_or_integrity", "temporary source identity changed during write");
+    }
+  } catch (error) {
+    failure = error;
+  } finally {
+    if (descriptor !== undefined) {
+      try {
+        closeSync(descriptor);
+      } catch (error) {
+        failure ??= error;
+      }
+    }
+  }
+  if (failure) {
+    if (identity) {
+      try { unlinkOwned(name, identity); } catch {}
+    }
+    throw failure;
+  }
+  try {
+    requireOwned(name, identity, "temporary source");
+  } catch (error) {
+    try { unlinkOwned(name, identity); } catch {}
+    throw error;
+  }
+  return { dev: identity.dev.toString(), ino: identity.ino.toString() };
+}
+
+function publishLink(request) {
+  const source = requireBasename(request.source, "temporary source");
+  const destination = requireBasename(request.destination, "output");
+  const expected = parseIdentity(request.expected_file, "temporary source");
+  anchorWorkingDirectory(request);
+  requireOwned(source, expected, "temporary source");
+  if (lstatRelative(destination)) {
+    fail("publication_failure", "output already exists");
+  }
+  let linked = false;
+  try {
+    linkSync(source, destination);
+    linked = true;
+    requireOwned(destination, expected, "published output");
+  } catch (error) {
+    if (linked) {
+      try { unlinkOwned(destination, expected); } catch {}
+    }
+    throw error;
+  }
+  return "linked";
+}
+
+function inspectOwned(request) {
+  const name = requireBasename(request.name, "owned file");
+  const expected = parseIdentity(request.expected_file, "owned file");
+  anchorWorkingDirectory(request);
+  const stat = lstatRelative(name);
+  if (!stat) return "absent";
+  if (stat.isSymbolicLink() || !stat.isFile() || !sameIdentity(stat, expected)) return "foreign";
+  return "owned";
+}
+
+function removeOwned(request) {
+  const name = requireBasename(request.name, "owned file");
+  const expected = parseIdentity(request.expected_file, "owned file");
+  anchorWorkingDirectory(request);
+  return unlinkOwned(name, expected);
+}
+
+function main() {
+  try {
+    const request = JSON.parse(readFileSync(0, "utf8"));
+    if (!request || request.protocol !== PROTOCOL) {
+      fail("unsafe_path_or_integrity", "anchored publisher protocol is invalid");
+    }
+    let result;
+    if (request.action === "create") result = createTemporary(request);
+    else if (request.action === "link") result = publishLink(request);
+    else if (request.action === "inspect") result = inspectOwned(request);
+    else if (request.action === "unlink") result = removeOwned(request);
+    else fail("unsafe_path_or_integrity", "anchored publisher action is invalid");
+    process.stdout.write(JSON.stringify({ ok: true, result }));
+  } catch (error) {
+    process.stdout.write(JSON.stringify({
+      ok: false,
+      status: error instanceof PublisherError ? error.status : "publication_failure",
+      message: error instanceof Error ? error.message : String(error),
+    }));
+  }
+}
+
+main();
+`;
 const APPLY_REPORT_SCHEMA_V3 = "superzhao.skill-lab.apply-report/v3";
 const DOCTOR_REPORT_SCHEMA_V3 = "superzhao.skill-lab.doctor-report/v3";
 const EXIT_CODES = Object.freeze({
@@ -537,151 +754,157 @@ function assertV3OutputAbsent(binding) {
   }
 }
 
-function inspectOwnedRegularFile(path, expected, label) {
-  const stat = lstatV3Output(path, label);
-  if (!stat || stat.isSymbolicLink() || !stat.isFile()
-      || !sameBigIntIdentity(stat, expected)) {
+function v3ChildIdentity(value, label) {
+  if (!value || typeof value !== "object"
+      || !/^(0|[1-9][0-9]*)$/.test(value.dev)
+      || !/^(0|[1-9][0-9]*)$/.test(value.ino)) {
+    throw classifiedError(
+      "publication_failure",
+      `${label} returned a malformed physical identity`,
+    );
+  }
+  const identity = { dev: BigInt(value.dev), ino: BigInt(value.ino) };
+  if (identity.ino === 0n) {
+    throw classifiedError(
+      "unsafe_path_or_integrity",
+      `${label} returned an unavailable inode identity`,
+    );
+  }
+  return identity;
+}
+
+function runAnchoredV3Publisher(binding, action) {
+  verifyV3OutputParent(binding);
+  const parentIdentity = binding.parentChain.at(-1);
+  const request = {
+    protocol: ANCHORED_PUBLISHER_PROTOCOL,
+    action: action.action,
+    expected_parent: {
+      dev: parentIdentity.dev.toString(),
+      ino: parentIdentity.ino.toString(),
+    },
+    ...action,
+  };
+  const child = spawnSync(
+    process.execPath,
+    ["--eval", ANCHORED_PUBLISHER_SOURCE],
+    {
+      cwd: binding.parentAbsolute,
+      encoding: "utf8",
+      env: {},
+      input: JSON.stringify(request),
+      maxBuffer: 64 * 1024,
+      windowsHide: true,
+    },
+  );
+  verifyV3OutputParent(binding);
+  if (child.error || child.status !== 0) {
+    const detail = child.error?.message || child.stderr?.trim() || `exit ${child.status}`;
+    throw classifiedError(
+      "publication_failure",
+      `${binding.label} anchored publisher failed: ${detail}`,
+    );
+  }
+  let response;
+  try {
+    response = JSON.parse(child.stdout);
+  } catch {
+    throw classifiedError(
+      "publication_failure",
+      `${binding.label} anchored publisher returned malformed output`,
+    );
+  }
+  if (!response || response.ok !== true) {
+    const status = response?.status === "unsafe_path_or_integrity"
+      ? "unsafe_path_or_integrity"
+      : "publication_failure";
+    throw classifiedError(
+      status,
+      `${binding.label} anchored publisher: ${response?.message ?? "operation failed"}`,
+    );
+  }
+  return response.result;
+}
+
+function v3ExpectedFile(identity) {
+  return { dev: identity.dev.toString(), ino: identity.ino.toString() };
+}
+
+function assertV3RelativeOwned(binding, name, identity, label) {
+  const result = runAnchoredV3Publisher(binding, {
+    action: "inspect",
+    name,
+    expected_file: v3ExpectedFile(identity),
+  });
+  if (result !== "owned") {
     throw classifiedError(
       "unsafe_path_or_integrity",
       `${label} physical identity does not match its bound temporary source`,
     );
   }
-  return stat;
 }
 
-function assertV3TempOwned(binding, temporary) {
-  verifyV3OutputParent(binding);
-  inspectOwnedRegularFile(temporary.path, temporary.stat, `${binding.label} temporary source`);
-  let real;
+function removeV3RelativeIfOwned(binding, name, identity) {
   try {
-    real = realpathSync(temporary.path);
-  } catch (error) {
-    throw classifiedError(
-      "unsafe_path_or_integrity",
-      `${binding.label} temporary source could not be resolved: ${error.message}`,
-    );
-  }
-  if (dirname(real) !== binding.parentReal) {
-    throw classifiedError(
-      "unsafe_path_or_integrity",
-      `${binding.label} temporary source left its bound parent`,
-    );
-  }
-}
-
-function assertV3OutputOwned(binding, temporary) {
-  verifyV3OutputParent(binding);
-  inspectOwnedRegularFile(binding.absolute, temporary.stat, binding.label);
-}
-
-function removePathIfOwned(path, expected) {
-  let stat;
-  try {
-    stat = lstatSync(path, { bigint: true });
+    runAnchoredV3Publisher(binding, {
+      action: "unlink",
+      name,
+      expected_file: v3ExpectedFile(identity),
+    });
   } catch {
-    return;
-  }
-  if (stat.isSymbolicLink() || !stat.isFile() || !sameBigIntIdentity(stat, expected)) return;
-  try {
-    rmSync(path);
-  } catch {
-    // A failed cleanup must never fall back to deleting an unverified replacement.
+    // Cleanup never retries with an unverified pathname or removes a foreign inode.
   }
 }
 
 function createV3TemporarySource(binding, value) {
-  verifyV3OutputParent(binding);
-  const path = resolve(
-    binding.parentAbsolute,
-    `.skill-lab-apply-${randomBytes(16).toString("hex")}`,
-  );
-  let descriptor;
-  let stat;
-  let failure;
+  const name = `.skill-lab-apply-${randomBytes(16).toString("hex")}`;
+  const result = runAnchoredV3Publisher(binding, {
+    action: "create",
+    name,
+    content: Buffer.from(value, "utf8").toString("base64"),
+  });
+  const temporary = { name, stat: v3ChildIdentity(result, `${binding.label} temporary source`) };
   try {
-    descriptor = openSync(
-      path,
-      fsConstants.O_WRONLY
-        | fsConstants.O_CREAT
-        | fsConstants.O_EXCL
-        | fsConstants.O_NOFOLLOW,
-      0o600,
+    assertV3RelativeOwned(
+      binding,
+      temporary.name,
+      temporary.stat,
+      `${binding.label} temporary source`,
     );
-    stat = fstatSync(descriptor, { bigint: true });
-    if (!stat.isFile()) {
-      throw classifiedError(
-        "unsafe_path_or_integrity",
-        `${binding.label} temporary source is not a regular file`,
-      );
-    }
-    writeFileSync(descriptor, value);
-    const afterWrite = fstatSync(descriptor, { bigint: true });
-    if (!sameBigIntIdentity(stat, afterWrite)) {
-      throw classifiedError(
-        "unsafe_path_or_integrity",
-        `${binding.label} temporary source identity changed during write`,
-      );
-    }
-    stat = afterWrite;
   } catch (error) {
-    failure = error;
-  } finally {
-    if (descriptor !== undefined) {
-      try {
-        closeSync(descriptor);
-      } catch {
-        // The path and pinned inode still determine whether cleanup is safe.
-      }
-    }
-  }
-  if (failure) {
-    if (stat) removePathIfOwned(path, stat);
-    if (failure instanceof CliError) throw failure;
-    try {
-      verifyV3OutputParent(binding);
-    } catch (drift) {
-      throw drift;
-    }
-    throw classifiedError(
-      "publication_failure",
-      `could not create ${binding.label} temporary source: ${failure.message}`,
-    );
-  }
-  const temporary = { path, stat };
-  try {
-    assertV3TempOwned(binding, temporary);
-  } catch (error) {
-    removePathIfOwned(path, stat);
+    removeV3RelativeIfOwned(binding, temporary.name, temporary.stat);
     throw error;
   }
   return temporary;
 }
 
+function assertV3OutputOwned(binding, temporary) {
+  assertV3RelativeOwned(binding, basename(binding.absolute), temporary.stat, binding.label);
+}
+
 function publishV3Output(binding, temporary, state) {
   assertV3OutputAbsent(binding);
-  assertV3TempOwned(binding, temporary);
-  try {
-    linkSync(temporary.path, binding.absolute);
-    state.published = true;
-  } catch (error) {
-    try {
-      verifyV3OutputParent(binding);
-    } catch (drift) {
-      throw drift;
-    }
-    throw classifiedError(
-      "publication_failure",
-      `could not publish ${binding.label}: ${error.message}`,
-    );
-  }
+  assertV3RelativeOwned(
+    binding,
+    temporary.name,
+    temporary.stat,
+    `${binding.label} temporary source`,
+  );
+  state.attempted = true;
+  runAnchoredV3Publisher(binding, {
+    action: "link",
+    source: temporary.name,
+    destination: basename(binding.absolute),
+    expected_file: v3ExpectedFile(temporary.stat),
+  });
   assertV3OutputOwned(binding, temporary);
 }
 
 function writeTwoOutputsV3(candidateBinding, candidate, reportBinding, report) {
   let candidateTemporary;
   let reportTemporary;
-  const candidateState = { published: false };
-  const reportState = { published: false };
+  const candidateState = { attempted: false };
+  const reportState = { attempted: false };
   try {
     assertV3OutputAbsent(candidateBinding);
     assertV3OutputAbsent(reportBinding);
@@ -695,22 +918,34 @@ function writeTwoOutputsV3(candidateBinding, candidate, reportBinding, report) {
     assertV3OutputOwned(candidateBinding, candidateTemporary);
     assertV3OutputOwned(reportBinding, reportTemporary);
   } catch (error) {
-    if (reportState.published && reportTemporary) {
-      removePathIfOwned(reportBinding.absolute, reportTemporary.stat);
+    if (reportState.attempted && reportTemporary) {
+      removeV3RelativeIfOwned(
+        reportBinding,
+        basename(reportBinding.absolute),
+        reportTemporary.stat,
+      );
     }
-    if (candidateState.published && candidateTemporary) {
-      removePathIfOwned(candidateBinding.absolute, candidateTemporary.stat);
+    if (candidateState.attempted && candidateTemporary) {
+      removeV3RelativeIfOwned(
+        candidateBinding,
+        basename(candidateBinding.absolute),
+        candidateTemporary.stat,
+      );
     }
-    if (reportTemporary) removePathIfOwned(reportTemporary.path, reportTemporary.stat);
-    if (candidateTemporary) removePathIfOwned(candidateTemporary.path, candidateTemporary.stat);
+    if (reportTemporary) {
+      removeV3RelativeIfOwned(reportBinding, reportTemporary.name, reportTemporary.stat);
+    }
+    if (candidateTemporary) {
+      removeV3RelativeIfOwned(candidateBinding, candidateTemporary.name, candidateTemporary.stat);
+    }
     if (error instanceof CliError) throw error;
     throw classifiedError(
       "publication_failure",
       `could not publish apply artifacts: ${error.message}`,
     );
   }
-  removePathIfOwned(reportTemporary.path, reportTemporary.stat);
-  removePathIfOwned(candidateTemporary.path, candidateTemporary.stat);
+  removeV3RelativeIfOwned(reportBinding, reportTemporary.name, reportTemporary.stat);
+  removeV3RelativeIfOwned(candidateBinding, candidateTemporary.name, candidateTemporary.stat);
 }
 
 function countExact(content, needle) {

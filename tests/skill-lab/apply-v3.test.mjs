@@ -449,14 +449,24 @@ test("v3 apply treats an existing output and a publication race as exit 6", () =
   const race = makeFixture();
   try {
     writeJson(race.edits, basePatch(race));
-    const hook = `const fs = require("node:fs");\n`
+    const hook = `const childProcess = require("node:child_process");\n`
+      + `const fs = require("node:fs");\n`
       + `const { syncBuiltinESMExports } = require("node:module");\n`
-      + `const original = fs.linkSync;\n`
-      + `const candidate = ${JSON.stringify(race.candidate)};\n`
+      + `const original = childProcess.spawnSync;\n`
+      + `const protocol = "superzhao.skill-lab.anchored-publisher/v1";\n`
+      + `const candidate = "${race.candidate.split("/").at(-1)}";\n`
       + `const report = ${JSON.stringify(race.applyReport)};\n`
-      + `fs.linkSync = function(source, destination) {\n`
-      + `  const result = original.call(this, source, destination);\n`
-      + `  if (destination === candidate) fs.writeFileSync(report, "foreign owner", { flag: "wx" });\n`
+      + `let injected = false;\n`
+      + `childProcess.spawnSync = function(command, args, options) {\n`
+      + `  let request;\n`
+      + `  try { request = JSON.parse(String(options?.input ?? "")); } catch {}\n`
+      + `  const result = original.call(this, command, args, options);\n`
+      + `  if (!injected && command === process.execPath && request?.protocol === protocol\n`
+      + `      && request.action === "link" && request.destination === candidate\n`
+      + `      && result.status === 0) {\n`
+      + `    injected = true;\n`
+      + `    fs.writeFileSync(report, "foreign owner", { flag: "wx" });\n`
+      + `  }\n`
       + `  return result;\n`
       + `};\n`
       + `syncBuiltinESMExports();\n`;
@@ -469,56 +479,229 @@ test("v3 apply treats an existing output and a publication race as exit 6", () =
   }
 });
 
-test("v3 apply removes its outside link and returns exit 3 when a parent retargets", () => {
-  const f = makeFixture();
-  const outside = mkdtempSync(resolve(tmpdir(), "superzhao-skill-lab-publish-outside-"));
-  try {
-    const outputParent = resolve(f.root, "publish");
-    const retainedParent = `${outputParent}.inside`;
-    mkdirSync(outputParent, { mode: 0o700 });
-    f.candidate = resolve(outputParent, "candidate.md");
-    f.applyReport = resolve(outputParent, "apply-report.json");
-    writeJson(f.edits, basePatch(f));
+test("v3 apply anchors temp creation and link publication against restored-parent races", () => {
+  for (const phase of ["create", "link"]) {
+    const f = makeFixture();
+    const outside = mkdtempSync(resolve(tmpdir(), "superzhao-skill-lab-publish-outside-"));
+    try {
+      const outputParent = resolve(f.root, "publish");
+      const retainedParent = `${outputParent}.inside`;
+      const marker = resolve(f.root, `anchored-${phase}.txt`);
+      mkdirSync(outputParent, { mode: 0o700 });
+      f.candidate = resolve(outputParent, "candidate.md");
+      f.applyReport = resolve(outputParent, "apply-report.json");
+      writeJson(f.edits, basePatch(f));
 
-    const hook = `const fs = require("node:fs");\n`
+      const hook = `const childProcess = require("node:child_process");\n`
+        + `const fs = require("node:fs");\n`
+        + `const { syncBuiltinESMExports } = require("node:module");\n`
+        + `const original = childProcess.spawnSync;\n`
+        + `const protocol = "superzhao.skill-lab.anchored-publisher/v1";\n`
+        + `const phase = ${JSON.stringify(phase)};\n`
+        + `const parent = ${JSON.stringify(outputParent)};\n`
+        + `const retained = ${JSON.stringify(retainedParent)};\n`
+        + `const outside = ${JSON.stringify(outside)};\n`
+        + `const marker = ${JSON.stringify(marker)};\n`
+        + `let attacked = false;\n`
+        + `process.once("exit", () => {\n`
+        + `  if (!attacked) fs.writeFileSync(marker, "not-observed");\n`
+        + `});\n`
+        + `childProcess.spawnSync = function(command, args, options) {\n`
+        + `  let request;\n`
+        + `  try { request = JSON.parse(String(options?.input ?? "")); } catch {}\n`
+        + `  if (!attacked && command === process.execPath && request?.protocol === protocol\n`
+        + `      && request.action === phase) {\n`
+        + `    attacked = true;\n`
+        + `    const sanitized = options?.env\n`
+        + `      && !Object.prototype.hasOwnProperty.call(options.env, "NODE_OPTIONS");\n`
+        + `    fs.renameSync(parent, retained);\n`
+        + `    fs.symlinkSync(outside, parent, "dir");\n`
+        + `    try {\n`
+        + `      return original.call(this, command, args, options);\n`
+        + `    } finally {\n`
+        + `      fs.rmSync(parent);\n`
+        + `      fs.renameSync(retained, parent);\n`
+        + `      fs.writeFileSync(marker, sanitized ? phase : "inherited-NODE_OPTIONS");\n`
+        + `    }\n`
+        + `  }\n`
+        + `  return original.call(this, command, args, options);\n`
+        + `};\n`
+        + `syncBuiltinESMExports();\n`;
+      const result = runWithHook(f, applyArgs(f), hook);
+      assert.equal(readFileSync(marker, "utf8"), phase, `${phase}: anchored child spawn`);
+      assert.deepEqual(readdirSync(outside), [], `${phase}: outside remains untouched`);
+      assert.deepEqual(readdirSync(outputParent), [], `${phase}: no output or temp remains`);
+      assert.equal(result.status, 3, `${phase}: ${result.stderr}`);
+      assert.match(result.stderr, /unsafe_path_or_integrity|identity|parent|path/i);
+    } finally {
+      f.cleanup();
+      rmSync(outside, { recursive: true, force: true });
+    }
+  }
+});
+
+test("v3 apply conditionally rolls back after child post-link verification failures", () => {
+  for (const failureBudget of [1, 2]) {
+    const f = makeFixture();
+    try {
+      writeJson(f.edits, basePatch(f));
+      const failurePrelude = `const fs = require("node:fs");
+const originalLink = fs.linkSync;
+const originalLstat = fs.lstatSync;
+let linkedDestination;
+let remainingFailures = ${failureBudget};
+fs.linkSync = function(source, destination) {
+  const result = originalLink.call(this, source, destination);
+  linkedDestination = destination;
+  return result;
+};
+fs.lstatSync = function(path, ...rest) {
+  if (path === linkedDestination && remainingFailures > 0) {
+    remainingFailures -= 1;
+    const error = new Error("simulated post-link verification failure");
+    error.code = "EIO";
+    throw error;
+  }
+  return originalLstat.call(this, path, ...rest);
+};
+`;
+      const hook = `const childProcess = require("node:child_process");\n`
+        + `const { syncBuiltinESMExports } = require("node:module");\n`
+        + `const original = childProcess.spawnSync;\n`
+        + `const protocol = "superzhao.skill-lab.anchored-publisher/v1";\n`
+        + `const failurePrelude = ${JSON.stringify(failurePrelude)};\n`
+        + `let injected = false;\n`
+        + `childProcess.spawnSync = function(command, args, options) {\n`
+        + `  let request;\n`
+        + `  try { request = JSON.parse(String(options?.input ?? "")); } catch {}\n`
+        + `  if (!injected && command === process.execPath && request?.protocol === protocol\n`
+        + `      && request.action === "link") {\n`
+        + `    injected = true;\n`
+        + `    const evalIndex = args.indexOf("--eval");\n`
+        + `    const altered = [...args];\n`
+        + `    altered[evalIndex + 1] = failurePrelude + args[evalIndex + 1];\n`
+        + `    return original.call(this, command, altered, options);\n`
+        + `  }\n`
+        + `  return original.call(this, command, args, options);\n`
+        + `};\n`
+        + `syncBuiltinESMExports();\n`;
+      const result = runWithHook(f, applyArgs(f), hook);
+      assert.equal(result.status, 6, `${failureBudget}: ${result.stderr}`);
+      assert.match(result.stderr, /publication_failure|post-link|verification/i);
+      assertNoApplyOutput(f);
+      assert.equal(
+        readdirSync(f.root).some((name) => name.startsWith(".skill-lab-apply-")),
+        false,
+        `${failureBudget}: temporary sources must also be removed`,
+      );
+    } finally {
+      f.cleanup();
+    }
+  }
+});
+
+test("v3 apply rolls back an owned link after a malformed child response", () => {
+  const f = makeFixture();
+  try {
+    writeJson(f.edits, basePatch(f));
+    const hook = `const childProcess = require("node:child_process");\n`
       + `const { syncBuiltinESMExports } = require("node:module");\n`
-      + `const original = fs.linkSync;\n`
-      + `const candidate = ${JSON.stringify(f.candidate)};\n`
-      + `const parent = ${JSON.stringify(outputParent)};\n`
-      + `const retained = ${JSON.stringify(retainedParent)};\n`
-      + `const outside = ${JSON.stringify(outside)};\n`
-      + `let redirected = false;\n`
-      + `fs.linkSync = function(source, destination) {\n`
-      + `  if (!redirected && destination === candidate) {\n`
-      + `    redirected = true;\n`
-      + `    const stable = require("node:path").join(outside, ".pinned-temp");\n`
-      + `    original.call(this, source, stable);\n`
-      + `    fs.renameSync(parent, retained);\n`
-      + `    fs.symlinkSync(outside, parent, "dir");\n`
-      + `    fs.mkdirSync(require("node:path").dirname(source), { recursive: true });\n`
-      + `    original.call(this, stable, source);\n`
-      + `    const result = original.call(this, source, destination);\n`
-      + `    fs.rmSync(source);\n`
-      + `    fs.rmSync(stable);\n`
-      + `    return result;\n`
+      + `const original = childProcess.spawnSync;\n`
+      + `const protocol = "superzhao.skill-lab.anchored-publisher/v1";\n`
+      + `let injected = false;\n`
+      + `childProcess.spawnSync = function(command, args, options) {\n`
+      + `  let request;\n`
+      + `  try { request = JSON.parse(String(options?.input ?? "")); } catch {}\n`
+      + `  const result = original.call(this, command, args, options);\n`
+      + `  if (!injected && command === process.execPath && request?.protocol === protocol\n`
+      + `      && request.action === "link" && result.status === 0) {\n`
+      + `    injected = true;\n`
+      + `    return { ...result, stdout: "not-json" };\n`
       + `  }\n`
-      + `  return original.call(this, source, destination);\n`
+      + `  return result;\n`
       + `};\n`
       + `syncBuiltinESMExports();\n`;
     const result = runWithHook(f, applyArgs(f), hook);
+    assert.equal(result.status, 6, result.stderr);
+    assert.match(result.stderr, /publication_failure|malformed|publisher/i);
+    assertNoApplyOutput(f);
     assert.equal(
-      existsSync(resolve(outside, "candidate.md")),
+      readdirSync(f.root).some((name) => name.startsWith(".skill-lab-apply-")),
       false,
-      "an owned link published through the retargeted parent must be removed",
+      "temporary sources must also be removed",
     );
-    assert.equal(existsSync(resolve(outside, "apply-report.json")), false);
-    assert.equal(existsSync(resolve(retainedParent, "candidate.md")), false);
-    assert.equal(existsSync(resolve(retainedParent, "apply-report.json")), false);
-    assert.equal(result.status, 3, result.stderr);
-    assert.match(result.stderr, /unsafe_path_or_integrity|contain|identity|parent|path/i);
   } finally {
     f.cleanup();
-    rmSync(outside, { recursive: true, force: true });
+  }
+});
+
+test("v3 apply keeps relative publication in a cwd inode retargeted after spawn", () => {
+  for (const phase of ["create", "link"]) {
+    const f = makeFixture();
+    const outside = mkdtempSync(resolve(tmpdir(), "superzhao-skill-lab-bound-cwd-outside-"));
+    try {
+      const outputParent = resolve(f.root, "publish");
+      const retainedParent = `${outputParent}.inside`;
+      const marker = resolve(f.root, `bound-cwd-${phase}.txt`);
+      mkdirSync(outputParent, { mode: 0o700 });
+      f.candidate = resolve(outputParent, "candidate.md");
+      f.applyReport = resolve(outputParent, "apply-report.json");
+      writeJson(f.edits, basePatch(f));
+      const retargetPrelude = `const fs = require("node:fs");
+fs.renameSync(${JSON.stringify(outputParent)}, ${JSON.stringify(retainedParent)});
+fs.symlinkSync(${JSON.stringify(outside)}, ${JSON.stringify(outputParent)}, "dir");
+`;
+      const hook = `const childProcess = require("node:child_process");\n`
+        + `const fs = require("node:fs");\n`
+        + `const { syncBuiltinESMExports } = require("node:module");\n`
+        + `const original = childProcess.spawnSync;\n`
+        + `const protocol = "superzhao.skill-lab.anchored-publisher/v1";\n`
+        + `const phase = ${JSON.stringify(phase)};\n`
+        + `const parent = ${JSON.stringify(outputParent)};\n`
+        + `const retained = ${JSON.stringify(retainedParent)};\n`
+        + `const outside = ${JSON.stringify(outside)};\n`
+        + `const marker = ${JSON.stringify(marker)};\n`
+        + `const retargetPrelude = ${JSON.stringify(retargetPrelude)};\n`
+        + `let injected = false;\n`
+        + `childProcess.spawnSync = function(command, args, options) {\n`
+        + `  let request;\n`
+        + `  try { request = JSON.parse(String(options?.input ?? "")); } catch {}\n`
+        + `  if (!injected && command === process.execPath && request?.protocol === protocol\n`
+        + `      && request.action === phase) {\n`
+        + `    injected = true;\n`
+        + `    const evalIndex = args.indexOf("--eval");\n`
+        + `    const altered = [...args];\n`
+        + `    altered[evalIndex + 1] = retargetPrelude + args[evalIndex + 1];\n`
+        + `    try {\n`
+        + `      const result = original.call(this, command, altered, options);\n`
+        + `      const retainedNames = fs.readdirSync(retained);\n`
+        + `      const stayedAnchored = phase === "create"\n`
+        + `        ? retainedNames.some((name) => name.startsWith(".skill-lab-apply-"))\n`
+        + `        : retainedNames.includes("candidate.md");\n`
+        + `      const outsideUntouched = fs.readdirSync(outside).length === 0;\n`
+        + `      fs.writeFileSync(marker, stayedAnchored && outsideUntouched ? phase : "escaped");\n`
+        + `      return result;\n`
+        + `    } finally {\n`
+        + `      if (fs.existsSync(parent)) fs.rmSync(parent);\n`
+        + `      if (fs.existsSync(retained)) fs.renameSync(retained, parent);\n`
+        + `    }\n`
+        + `  }\n`
+        + `  return original.call(this, command, args, options);\n`
+        + `};\n`
+        + `syncBuiltinESMExports();\n`;
+      const result = runWithHook(f, applyArgs(f), hook);
+      assert.equal(readFileSync(marker, "utf8"), phase, `${phase}: cwd inode remains anchored`);
+      assert.equal(result.status, 0, `${phase}: ${result.stderr}`);
+      assert.deepEqual(readdirSync(outside), [], `${phase}: outside remains untouched`);
+      assert.deepEqual(
+        readdirSync(outputParent).sort(),
+        ["apply-report.json", "candidate.md"],
+        `${phase}: final outputs stay in the original directory inode`,
+      );
+    } finally {
+      f.cleanup();
+      rmSync(outside, { recursive: true, force: true });
+    }
   }
 });
 
@@ -526,18 +709,36 @@ test("v3 apply removes only its pinned temp after a temp write failure", () => {
   const f = makeFixture();
   try {
     writeJson(f.edits, basePatch(f));
-    const hook = `const fs = require("node:fs");\n`
+    const failurePrelude = `const fs = require("node:fs");
+const originalWrite = fs.writeFileSync;
+fs.writeFileSync = function(path, ...rest) {
+  if (typeof path === "number") {
+    const error = new Error("simulated temporary write failure");
+    error.code = "ENOSPC";
+    throw error;
+  }
+  return originalWrite.call(this, path, ...rest);
+};
+`;
+    const hook = `const childProcess = require("node:child_process");\n`
+      + `const fs = require("node:fs");\n`
       + `const { syncBuiltinESMExports } = require("node:module");\n`
-      + `const original = fs.writeFileSync;\n`
+      + `const original = childProcess.spawnSync;\n`
+      + `const protocol = "superzhao.skill-lab.anchored-publisher/v1";\n`
+      + `const failurePrelude = ${JSON.stringify(failurePrelude)};\n`
       + `let injected = false;\n`
-      + `fs.writeFileSync = function(path, ...args) {\n`
-      + `  if (!injected && typeof path === "number") {\n`
+      + `childProcess.spawnSync = function(command, args, options) {\n`
+      + `  let request;\n`
+      + `  try { request = JSON.parse(String(options?.input ?? "")); } catch {}\n`
+      + `  if (!injected && command === process.execPath && request?.protocol === protocol\n`
+      + `      && request.action === "create") {\n`
       + `    injected = true;\n`
-      + `    const error = new Error("simulated temporary write failure");\n`
-      + `    error.code = "ENOSPC";\n`
-      + `    throw error;\n`
+      + `    const evalIndex = args.indexOf("--eval");\n`
+      + `    const altered = [...args];\n`
+      + `    altered[evalIndex + 1] = failurePrelude + args[evalIndex + 1];\n`
+      + `    return original.call(this, command, altered, options);\n`
       + `  }\n`
-      + `  return original.call(this, path, ...args);\n`
+      + `  return original.call(this, command, args, options);\n`
       + `};\n`
       + `syncBuiltinESMExports();\n`;
     const result = runWithHook(f, applyArgs(f), hook);

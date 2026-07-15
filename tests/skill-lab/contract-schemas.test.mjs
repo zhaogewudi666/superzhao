@@ -1,10 +1,16 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import test from "node:test";
 
 import {
   readSchemaPair,
+  schemaRoot,
   schemaErrors,
 } from "./helpers.mjs";
+
+const META_SCHEMA_URI = "https://superzhao.dev/schemas/skill-lab/v3/meta.schema.json";
+const UTF8_BYTES_VOCABULARY_URI = "https://superzhao.dev/schemas/skill-lab/v3/vocab/utf8-bytes/v1";
 
 const CONTRACTS = [
   ["patch", "superzhao.skill-lab.patch/v3"],
@@ -36,10 +42,26 @@ function collectSchemaNodes(value, predicate, nodes = []) {
   return nodes;
 }
 
+function customKeywordShapeErrors(value, keywordShape, path = "$", errors = []) {
+  if (!value || typeof value !== "object") return errors;
+  if (Object.hasOwn(value, "x-maxUtf8Bytes")) {
+    errors.push(...schemaErrors(
+      value["x-maxUtf8Bytes"],
+      keywordShape,
+      keywordShape,
+      `${path}.x-maxUtf8Bytes`,
+    ));
+  }
+  for (const [key, child] of Object.entries(value)) {
+    customKeywordShapeErrors(child, keywordShape, `${path}.${key}`, errors);
+  }
+  return errors;
+}
+
 test("all eight v3 golden examples validate against exact closed schemas", () => {
   for (const [name, schemaName] of CONTRACTS) {
     const { schema, example } = readSchemaPair(name);
-    assert.equal(schema.$schema, "https://json-schema.org/draft/2020-12/schema");
+    assert.equal(schema.$schema, META_SCHEMA_URI);
     assert.equal(schema.$id, `https://superzhao.dev/schemas/skill-lab/v3/${name}.schema.json`);
     assert.equal(schema.properties.schema.const, schemaName);
     assert.equal(example.schema, schemaName);
@@ -48,6 +70,50 @@ test("all eight v3 golden examples validate against exact closed schemas", () =>
     const unknownRoot = { ...example, unexpected: true };
     assertInvalid(unknownRoot, schema, `${name} must reject an unknown root key`);
   }
+});
+
+test("the v3 dialect requires and documents the UTF-8 byte assertion vocabulary", () => {
+  const meta = JSON.parse(readFileSync(resolve(schemaRoot, "meta.schema.json"), "utf8"));
+  assert.equal(meta.$schema, "https://json-schema.org/draft/2020-12/schema");
+  assert.equal(meta.$id, META_SCHEMA_URI);
+  assert.equal(meta.$dynamicAnchor, "meta");
+  assert.deepEqual(meta.$vocabulary, {
+    "https://json-schema.org/draft/2020-12/vocab/core": true,
+    "https://json-schema.org/draft/2020-12/vocab/applicator": true,
+    "https://json-schema.org/draft/2020-12/vocab/unevaluated": true,
+    "https://json-schema.org/draft/2020-12/vocab/validation": true,
+    "https://json-schema.org/draft/2020-12/vocab/meta-data": true,
+    "https://json-schema.org/draft/2020-12/vocab/format-annotation": true,
+    "https://json-schema.org/draft/2020-12/vocab/content": true,
+    [UTF8_BYTES_VOCABULARY_URI]: true,
+  });
+  assert.equal(meta.allOf[0].$ref, "https://json-schema.org/draft/2020-12/schema");
+  const keywordShape = meta.allOf.at(-1).properties["x-maxUtf8Bytes"];
+  assert.deepEqual(keywordShape, {
+    type: "integer",
+    minimum: 0,
+  });
+
+  const patchSchema = readSchemaPair("patch").schema;
+  assert.deepEqual(customKeywordShapeErrors(patchSchema, keywordShape), []);
+  for (const malformedValue of [4096.5, -1]) {
+    const malformed = clone(patchSchema);
+    malformed.$defs.edit.properties.target["x-maxUtf8Bytes"] = malformedValue;
+    assert.notDeepEqual(
+      customKeywordShapeErrors(malformed, keywordShape),
+      [],
+      `nested x-maxUtf8Bytes=${malformedValue} must fail meta-schema syntax`,
+    );
+  }
+
+  const semantics = readFileSync(
+    resolve(schemaRoot, "utf8-byte-vocabulary.md"),
+    "utf8",
+  );
+  assert.match(semantics, /x-maxUtf8Bytes/);
+  assert.match(semantics, /UTF-8 bytes/);
+  assert.match(semantics, /required vocabulary/i);
+  assert.match(semantics, /refuse|unsupported/i);
 });
 
 test("patch schema and example pin provenance, operations, and rejection enums", () => {

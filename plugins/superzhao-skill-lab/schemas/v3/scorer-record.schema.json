@@ -1,5 +1,5 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$schema": "https://superzhao.dev/schemas/skill-lab/v3/meta.schema.json",
   "$id": "https://superzhao.dev/schemas/skill-lab/v3/scorer-record.schema.json",
   "title": "Superzhao Skill Lab v3 scorer record",
   "type": "object",

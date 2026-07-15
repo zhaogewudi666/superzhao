@@ -4,15 +4,15 @@ Use this template when dispatching a spec document reviewer subagent.
 
 **Purpose:** Verify the spec is complete, consistent, and ready for implementation planning.
 
-**Dispatch after:** Spec document is written to docs/superpowers/specs/
+**Dispatch after:** The decision-complete spec is written and its content digest and base state are recorded.
 
 ```
-Subagent (general-purpose):
-  description: "Review spec document"
-  prompt: |
+spawn_agent(task_name="review_spec", fork_turns="none", message="""
     You are a spec document reviewer. Verify this spec is complete and ready for planning.
 
     **Spec to review:** [SPEC_FILE_PATH]
+    **Expected content digest:** [SPEC_DIGEST]
+    **Base commit or state:** [BASE_STATE]
 
     ## What to Check
 
@@ -22,6 +22,7 @@ Subagent (general-purpose):
     | Consistency | Internal contradictions, conflicting requirements |
     | Clarity | Requirements ambiguous enough to cause someone to build the wrong thing |
     | Scope | Focused enough for a single plan — not covering multiple independent subsystems |
+    | Decisions | Outcome, boundaries, invariants, approach/interfaces, failure handling, validation, and unresolved owners are clear where relevant |
     | YAGNI | Unrequested features, over-engineering |
 
     ## Calibration
@@ -39,11 +40,14 @@ Subagent (general-purpose):
 
     **Status:** Approved | Issues Found
 
+    **Reviewed binding:** [SPEC_FILE_PATH] @ [SPEC_DIGEST], base [BASE_STATE]
+
     **Issues (if any):**
     - [Section X]: [specific issue] - [why it matters for planning]
 
     **Recommendations (advisory, do not block approval):**
     - [suggestions for improvement]
+""")
 ```
 
 **Reviewer returns:** Status, Issues (if any), Recommendations

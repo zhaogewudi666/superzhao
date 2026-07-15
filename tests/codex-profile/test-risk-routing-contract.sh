@@ -190,6 +190,11 @@ require_text skills/using-superpowers/references/codex-tools.md 'interrupt_agent
 require_text skills/verification-before-completion/SKILL.md '(R1.*targeted|targeted.*R1)' 'verification couples R1 with targeted checks'
 require_text skills/verification-before-completion/SKILL.md '(R2.*affected|affected.*R2)' 'verification couples R2 with affected checks'
 require_text skills/verification-before-completion/SKILL.md 'R3.*(complete relevant suite|full verification)|(complete relevant suite|full verification).*R3' 'verification couples R3 with complete checks'
+require_text skills/verification-before-completion/SKILL.md 'Claim/Evidence Map' 'verification maps each claim to exact evidence'
+require_text skills/verification-before-completion/SKILL.md 'fresh across messages.*bound inputs.*unchanged' 'verification freshness follows unchanged inputs rather than message boundaries'
+require_text skills/verification-before-completion/SKILL.md 'Rerun.*claim (broadens|expands).*bound input.*changes.*external state' 'verification names evidence invalidation conditions'
+reject_text skills/verification-before-completion/SKILL.md 'in this message' 'verification does not tie freshness to the current message'
+reject_text skills/verification-before-completion/SKILL.md 'Moving to next task|Delegating to agents' 'verification does not gate task switching without a claim'
 
 for script in scripts/install-codex-profile.sh scripts/rollback-codex-profile.sh; do
   if [[ ! -x "$ROOT/$script" ]]; then

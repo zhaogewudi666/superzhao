@@ -19,20 +19,31 @@ Claiming work is complete without verification is dishonesty, not efficiency.
 NO COMPLETION CLAIMS WITHOUT FRESH VERIFICATION EVIDENCE
 ```
 
-If you haven't run the verification command in this message, you cannot claim it passes.
+Fresh means the evidence still matches the exact claim and its bound inputs, not that it ran in the same message.
+
+## Claim/Evidence Map
+
+Before making a claim, record:
+
+- **Claim and scope:** the precise status being asserted.
+- **Evidence:** the command or direct observation, result, and relevant output.
+- **Bound inputs:** the relevant tree or HEAD, configuration, dependencies, toolchain, and external state.
+
+Evidence stays fresh across messages while its bound inputs remain unchanged. Rerun when the claim broadens, any bound input changes, the prior command failed or was incomplete, or external state may have changed.
 
 ## The Gate Function
 
 ```
 BEFORE claiming any status or expressing satisfaction:
 
-1. IDENTIFY: What command proves this claim?
-2. RUN: Execute the risk-appropriate command (fresh and complete for the exact claim)
-3. READ: Read the full output of the risk-appropriate command; check exit code, count failures
-4. VERIFY: Does output confirm the claim?
+1. IDENTIFY: What exact claim and scope need proof?
+2. BIND: Which inputs determine whether existing evidence is still fresh?
+3. RUN OR REUSE: Execute the risk-appropriate proof, or reuse still-bound evidence.
+4. READ: Check the relevant output, exit status, and failure count.
+5. VERIFY: Does the evidence confirm the exact claim?
    - If NO: State actual status with evidence
    - If YES: State claim WITH evidence
-5. ONLY THEN: Make the claim
+6. ONLY THEN: Make the claim
 
 Skip any step = lying, not verifying
 ```
@@ -51,7 +62,7 @@ Evidence proves only the scope it exercised. A targeted R1 check or affected R2 
 
 | Claim | Requires | Not Sufficient |
 |-------|----------|----------------|
-| Tests pass | Complete test scope named in the claim: 0 failures | A focused test when claiming all tests; previous run |
+| Tests pass | Complete test scope named in the claim: 0 failures | A focused test when claiming all tests; an unbound or invalidated prior run |
 | Linter clean | Risk-appropriate lint scope named in the claim: 0 errors | Output covering less than the claimed lint scope |
 | Build succeeds | Build command: exit 0 | Linter passing, logs look good |
 | Bug fixed | Test original symptom: passes | Code changed, assumed fixed |
@@ -81,6 +92,7 @@ Evidence proves only the scope it exercised. A targeted R1 check or affected R2 
 | "Agent said success" | Verify independently |
 | "I'm tired" | Exhaustion ≠ excuse |
 | "A narrower check is enough" | Only when it is the risk-appropriate proof for the exact narrow claim; never extrapolate it to all tests or broader status |
+| "It passed earlier" | Reuse it only when the claim and every relevant bound input are unchanged |
 | "Different words so rule doesn't apply" | Spirit over letter |
 
 ## Key Patterns
@@ -132,9 +144,7 @@ From 24 failure memories:
 - ANY variation of success/completion claims
 - ANY expression of satisfaction
 - ANY positive statement about work state
-- Committing, PR creation, task completion
-- Moving to next task
-- Delegating to agents
+- Committing, pushing, PR creation, or task completion
 
 **Rule applies to:**
 - Exact phrases
@@ -146,6 +156,6 @@ From 24 failure memories:
 
 **No shortcuts for verification.**
 
-Run the command. Read the output. THEN claim the result.
+Run the proof or confirm its bindings are unchanged. Read the evidence. THEN claim the result.
 
 This is non-negotiable.

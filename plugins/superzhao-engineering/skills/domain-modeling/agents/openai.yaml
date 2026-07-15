@@ -1,0 +1,6 @@
+interface:
+  display_name: "Domain Modeling"
+  short_description: "Model domain invariants before schema changes"
+  default_prompt: "Use $superzhao-engineering:domain-modeling to surface concepts, invariants, states, transitions, and blocking business decisions before implementation."
+policy:
+  allow_implicit_invocation: false

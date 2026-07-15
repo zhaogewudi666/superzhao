@@ -1,35 +1,51 @@
-# Testing Superpowers
+# Testing Superzhao
 
-Superpowers has two distinct kinds of tests, each in its own directory:
+Superzhao keeps deterministic repository tests separate from model-behavior
+evaluations. Run the narrow deterministic suite while iterating, then the
+integrated suites affected by the final diff.
 
-- **`tests/`** — does the plugin's non-LLM code work? Bash + node + python integration tests for brainstorm-server JS, OpenCode plugin loading, codex-plugin sync, and analysis utilities.
-- **`evals/`** — do agents behave correctly on real LLM sessions? Python harness driving real tmux sessions of Claude Code / Codex / Gemini CLI, with an LLM actor and verifier judging skill compliance.
+## Deterministic repository tests
 
-## Plugin tests
+The main entry points are:
 
-Live in `tests/`. Currently:
+| Area | Command |
+|---|---|
+| Managed Codex profile, routing contracts, installer/rollback, integrity | `bash tests/codex-profile/run-tests.sh` |
+| Codex plugin manifest and packaging | `bash tests/codex/test-marketplace-manifest.sh` and `bash tests/codex/test-package-codex-plugin.sh` |
+| Codex fork sync | `bash tests/codex-plugin-sync/test-sync-to-codex-plugin.sh` |
+| Kimi plugin | `bash tests/kimi/run-tests.sh` |
+| OpenCode plugin | `bash tests/opencode/run-tests.sh` |
+| Pi extension | `node --test tests/pi/test-pi-extension.mjs` |
+| Brainstorm server | `npm test --prefix tests/brainstorm-server` |
+| Optional plugin layout and Skill contracts | `bash tests/optional-plugins/test-plugin-layout.sh`, `bash tests/optional-plugins/test-skill-lab-skill.sh`, and `bash tests/optional-plugins/test-engineering-skills.sh` |
+| Skill Lab CLI | `node --test tests/skill-lab/skill-lab.test.mjs` |
+| Maintainer docs | `bash tests/docs/test-testing-guide.sh` and `bash tests/docs/test-plugin-development-guide.sh` |
+| Shell scripts | `bash tests/shell-lint/test-lint-shell.sh` |
 
-- `tests/brainstorm-server/` — node test suite for the brainstorm server JS code.
-- `tests/opencode/` — bash tests for OpenCode plugin loading, bootstrap caching, and tool registration.
-- `tests/codex-plugin-sync/` — bash sync verification.
-- `tests/kimi/` — bash/Python checks for Kimi plugin manifest wiring.
-- `tests/claude-code/test-helpers.sh`, `analyze-token-usage.py` — utilities used by remaining bash tests.
-- `tests/claude-code/test-subagent-driven-development.sh` — agent-can-describe-SDD test (no drill counterpart; tests description-recall, not behavior).
-- `tests/claude-code/test-subagent-driven-development-integration.sh` — extended SDD integration with token analysis (drill covers the YAGNI subset; bash adds commit-count, Claude Code task-tracking, and token telemetry assertions).
-- `tests/claude-code/test-worktree-native-preference.sh` — RED-GREEN-REFACTOR validation for worktree skill (drill covers the PRESSURE phase; bash also covers RED/GREEN baselines).
-- `tests/explicit-skill-requests/` — Haiku-specific, multi-turn, and skill-name-prompted tests not covered by drill.
+Some Claude Code integration and explicit-request tests launch real agent
+sessions and are slower or harness-specific. Read the scripts in
+`tests/claude-code/` and `tests/explicit-skill-requests/` before running them;
+they are not a substitute for the cross-harness behavior-eval protocol below.
 
-Run plugin tests via the relevant directory's `run-*.sh` or `npm test`.
+## Skill-behavior evaluations
 
-## Skill behavior evals
+The external eval harness is checked out separately at `evals/` from
+[`superpowers-evals`](https://github.com/prime-radiant-inc/superpowers-evals/).
+Its scenarios drive real harness sessions and use an independent verifier. See
+`evals/README.md` in that checkout for setup and commands.
 
-Live in `evals/`. Drill is the harness; scenarios live at `evals/scenarios/*.yaml`. See `evals/README.md` for setup. Quick start:
+Accepted Superzhao behavior records are committed under
+`docs/superpowers/evals/`. Those records bind the evaluated skill content,
+environment, raw actor outputs, scoring, and result. A committed report is
+evidence for only the exact content and environment it names; it is not a live
+test runner.
 
-```bash
-cd evals
-uv sync --extra dev
-export ANTHROPIC_API_KEY=sk-...
-uv run drill run triggering-test-driven-development -b claude
-```
+For a new skill, capture a no-skill baseline. For an existing skill, compare
+the exact current profile with one candidate at a time and include important
+cases plus over-trigger/safety controls. Follow `skills/writing-skills/SKILL.md`
+for sample counts, invalid-sample handling, candidate acceptance, and final
+whole-profile verification.
 
-Drill scenarios are slow (3-30+ minutes each) and run real LLM sessions. They are not part of CI today; the natural follow-up is a tiered model (fast subset on PR, full sweep nightly + on-demand).
+Behavior evals are slow and may require model credentials. They are not part of
+the fast deterministic suite, but behavior-shaping skill changes are not ready
+for adoption without their required before/after evidence.

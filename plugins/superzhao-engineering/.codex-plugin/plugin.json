@@ -1,0 +1,18 @@
+{
+  "name": "superzhao-engineering",
+  "version": "0.1.0",
+  "description": "Experimental domain-modeling workflow adapted to Superzhao scope controls.",
+  "author": {
+    "name": "Superzhao contributors"
+  },
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Superzhao Engineering",
+    "shortDescription": "Experimental domain-modeling workflow.",
+    "longDescription": "Provides a manually selected domain-modeling candidate while preserving Superzhao's scope discipline and authorization boundaries.",
+    "developerName": "Superzhao contributors",
+    "category": "Developer Tools",
+    "capabilities": ["skills"],
+    "defaultPrompt": "Use $superzhao-engineering:domain-modeling to model unresolved domain meaning before implementation."
+  }
+}

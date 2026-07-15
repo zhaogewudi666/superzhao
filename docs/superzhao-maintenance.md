@@ -67,7 +67,9 @@ bash tests/shell-lint/test-lint-shell.sh
 git diff --check upstream/main...HEAD
 ```
 
-Do not install or publish the update if a check fails. A passing suite is
+`run-tests.sh` runs every Bash contract and rehearsal test plus the Node test
+suites in `tests/codex-profile/`; Node.js must be available or the runner
+fails. Do not install or publish the update if a check fails. A passing suite is
 necessary evidence, but it does not replace manual review of the full diff.
 After review and approval, publish the update branch to the fork rather than
 to upstream:
@@ -111,6 +113,28 @@ to `${CODEX_HOME:-$HOME/.codex}/superzhao-last-backup`.
 
 Start a new Codex task after installation so skill discovery reloads the
 activated profile.
+
+## Verify an installed profile
+
+`scripts/profile-integrity.mjs` binds the managed skill set to content
+checksums. To confirm that an installed Codex home matches the current
+repository checkout exactly, generate a manifest from the checkout and verify
+the installed skills against it:
+
+```bash
+node scripts/profile-integrity.mjs manifest --root skills --output /tmp/profile-manifest.json
+node scripts/profile-integrity.mjs verify \
+  --root "${CODEX_HOME:-$HOME/.codex}/skills" \
+  --manifest /tmp/profile-manifest.json
+```
+
+A successful verification reports `"verified": true` with the profile's
+SHA-256. That hash identifies the exact profile content, so it can be compared
+against the profile hash recorded in behavior-evaluation reports under
+`docs/superpowers/evals/` to confirm the installed profile is the evaluated
+one. The managed skill list lives in `config/codex-profile-skills.txt` and
+must stay identical to the installer's `SKILLS` array;
+`tests/codex-profile/test-managed-set-sync.sh` enforces that.
 
 ## Roll back
 

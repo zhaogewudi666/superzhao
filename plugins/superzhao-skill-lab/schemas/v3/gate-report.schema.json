@@ -1,0 +1,360 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://superzhao.dev/schemas/skill-lab/v3/gate-report.schema.json",
+  "title": "Superzhao Skill Lab v3 gate report",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "campaign_id",
+    "source_sha256",
+    "candidate_sha256",
+    "cases_sha256",
+    "samples_sha256",
+    "required_valid",
+    "train_rows",
+    "selection",
+    "final"
+  ],
+  "properties": {
+    "schema": {
+      "const": "superzhao.skill-lab.gate-report/v3"
+    },
+    "campaign_id": {
+      "$ref": "#/$defs/stableId"
+    },
+    "source_sha256": {
+      "$ref": "#/$defs/sha256"
+    },
+    "candidate_sha256": {
+      "$ref": "#/$defs/sha256"
+    },
+    "cases_sha256": {
+      "$ref": "#/$defs/sha256"
+    },
+    "samples_sha256": {
+      "$ref": "#/$defs/sha256"
+    },
+    "required_valid": {
+      "type": "integer",
+      "minimum": 5,
+      "maximum": 20
+    },
+    "train_rows": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 1000
+    },
+    "selection": {
+      "$ref": "#/$defs/selectionResult"
+    },
+    "final": {
+      "$ref": "#/$defs/finalResult"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "required": ["selection"],
+        "properties": {
+          "selection": {
+            "required": ["status"],
+            "properties": {
+              "status": {
+                "const": "selection_reject"
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "final": {
+            "required": ["status"],
+            "properties": {
+              "status": {
+                "const": "not_evaluated"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "required": ["final"],
+        "properties": {
+          "final": {
+            "required": ["status"],
+            "properties": {
+              "status": {
+                "const": "final_accept"
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "selection": {
+            "required": ["status"],
+            "properties": {
+              "status": {
+                "const": "selection_pass"
+              }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "stableId": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
+    },
+    "failureCode": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "nonBlank": {
+      "type": "string",
+      "pattern": "\\S"
+    },
+    "stats": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["pass", "fail", "invalid", "indeterminate", "valid"],
+      "properties": {
+        "pass": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000
+        },
+        "fail": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000
+        },
+        "invalid": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000
+        },
+        "indeterminate": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000
+        },
+        "valid": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 20
+        }
+      }
+    },
+    "failureCount": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["failure_code", "count"],
+      "properties": {
+        "failure_code": {
+          "$ref": "#/$defs/failureCode"
+        },
+        "count": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 20
+        }
+      }
+    },
+    "caseResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "case_id",
+        "case_type",
+        "current",
+        "candidate",
+        "repeated_current_failure_codes",
+        "reasons"
+      ],
+      "properties": {
+        "case_id": {
+          "$ref": "#/$defs/stableId"
+        },
+        "case_type": {
+          "enum": ["important", "control"]
+        },
+        "current": {
+          "$ref": "#/$defs/stats"
+        },
+        "candidate": {
+          "$ref": "#/$defs/stats"
+        },
+        "repeated_current_failure_codes": {
+          "type": "array",
+          "maxItems": 20,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/failureCount"
+          }
+        },
+        "reasons": {
+          "type": "array",
+          "maxItems": 1000,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/nonBlank"
+          }
+        }
+      }
+    },
+    "selectionResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "cases", "reasons"],
+      "properties": {
+        "status": {
+          "enum": ["selection_pass", "selection_reject"]
+        },
+        "cases": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 1000,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/caseResult"
+          }
+        },
+        "reasons": {
+          "type": "array",
+          "maxItems": 1000,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/nonBlank"
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "required": ["status"],
+            "properties": {
+              "status": {
+                "const": "selection_pass"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "reasons": {
+                "maxItems": 0
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "reasons": {
+                "minItems": 1
+              }
+            }
+          }
+        }
+      ]
+    },
+    "finalResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "cases", "reasons"],
+      "properties": {
+        "status": {
+          "enum": ["not_evaluated", "final_reject", "final_accept"]
+        },
+        "cases": {
+          "type": "array",
+          "maxItems": 1000,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/caseResult"
+          }
+        },
+        "reasons": {
+          "type": "array",
+          "maxItems": 1000,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/nonBlank"
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "required": ["status"],
+            "properties": {
+              "status": {
+                "const": "not_evaluated"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "cases": {
+                "maxItems": 0
+              },
+              "reasons": {
+                "minItems": 1
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "cases": {
+                "minItems": 2
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": ["status"],
+            "properties": {
+              "status": {
+                "const": "final_accept"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "reasons": {
+                "maxItems": 0
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": ["status"],
+            "properties": {
+              "status": {
+                "const": "final_reject"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "reasons": {
+                "minItems": 1
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

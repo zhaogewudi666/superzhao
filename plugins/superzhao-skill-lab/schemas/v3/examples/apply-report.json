@@ -1,0 +1,59 @@
+{
+  "schema": "superzhao.skill-lab.apply-report/v3",
+  "status": "applied",
+  "proposal_id": "proposal-v3-example",
+  "source_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+  "candidate_sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+  "patch_sha256": "3333333333333333333333333333333333333333333333333333333333333333",
+  "max_edits": 1,
+  "max_added_bytes": 1024,
+  "max_removed_bytes": 1024,
+  "actual_added_bytes": 37,
+  "actual_removed_bytes": 21,
+  "assumptions": [
+    {
+      "assumption_id": "assumption-body-gap",
+      "status": "known",
+      "summary": "The observed behavior gap is confined to body guidance."
+    }
+  ],
+  "prior_rejections": [
+    {
+      "rejection_id": "rejection-v2-example",
+      "report": {
+        "path": "rejections/rejection-v2-example.json",
+        "sha256": "9999999999999999999999999999999999999999999999999999999999999999"
+      },
+      "relationship": "narrows",
+      "note": "This proposal narrows the previously rejected edit surface."
+    }
+  ],
+  "applied_edits": [
+    {
+      "edit_id": "edit-workflow-gap",
+      "index": 1,
+      "op": "replace",
+      "target_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "content_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "original_anchor_start": 128,
+      "original_anchor_end": 149,
+      "application_order": 1,
+      "before_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+      "after_sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+      "added_bytes": 37,
+      "removed_bytes": 21,
+      "rationale": "Close the repeated workflow gap while preserving successful controls.",
+      "supporting_case_ids": [
+        "selection-important-1",
+        "selection-control-1"
+      ],
+      "support_count": 2,
+      "source_types": [
+        "failure",
+        "success",
+        "rejection",
+        "human-constraint"
+      ]
+    }
+  ]
+}

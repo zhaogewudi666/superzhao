@@ -1,0 +1,148 @@
+{
+  "schema": "superzhao.skill-lab.bundle-manifest/v3",
+  "campaign_id": "campaign-v3-example",
+  "proposal_id": "proposal-v3-example",
+  "producer": {
+    "plugin_id": "superzhao-skill-lab",
+    "plugin_version": "1.0.0",
+    "cli_sha256": "2468ace013579bdf2468ace013579bdf2468ace013579bdf2468ace013579bdf",
+    "node_version": "v22.22.2",
+    "platform": "darwin",
+    "arch": "arm64"
+  },
+  "entrypoints": {
+    "source": "source_SKILL.md",
+    "candidate": "proposed_SKILL.md",
+    "patch": "proposal/patch.json",
+    "cases": "campaign/cases.json",
+    "samples": "campaign/samples.json",
+    "apply_report": "reports/apply.json",
+    "gate_report": "reports/gate.json",
+    "producer_cli": "producer/skill-lab.mjs"
+  },
+  "artifacts": [
+    {
+      "kind": "source-skill",
+      "source_path": "skills/example/SKILL.md",
+      "packaged_path": "source_SKILL.md",
+      "sha256": "1111111111111111111111111111111111111111111111111111111111111111"
+    },
+    {
+      "kind": "candidate-skill",
+      "source_path": "candidate/example/SKILL.md",
+      "packaged_path": "proposed_SKILL.md",
+      "sha256": "2222222222222222222222222222222222222222222222222222222222222222"
+    },
+    {
+      "kind": "patch",
+      "source_path": "proposal/patch.json",
+      "packaged_path": "proposal/patch.json",
+      "sha256": "3333333333333333333333333333333333333333333333333333333333333333"
+    },
+    {
+      "kind": "cases",
+      "source_path": "campaign/cases.json",
+      "packaged_path": "campaign/cases.json",
+      "sha256": "3333333333333333333333333333333333333333333333333333333333333333"
+    },
+    {
+      "kind": "samples",
+      "source_path": "campaign/samples.json",
+      "packaged_path": "campaign/samples.json",
+      "sha256": "4444444444444444444444444444444444444444444444444444444444444444"
+    },
+    {
+      "kind": "apply-report",
+      "source_path": "reports/apply.json",
+      "packaged_path": "reports/apply.json",
+      "sha256": "7777777777777777777777777777777777777777777777777777777777777777"
+    },
+    {
+      "kind": "gate-report",
+      "source_path": "reports/gate.json",
+      "packaged_path": "reports/gate.json",
+      "sha256": "8888888888888888888888888888888888888888888888888888888888888888"
+    },
+    {
+      "kind": "actor-run",
+      "source_path": "campaign/runs/run-selection-important-current-1.json",
+      "packaged_path": "campaign/runs/run-selection-important-current-1.json",
+      "sha256": "5555555555555555555555555555555555555555555555555555555555555555"
+    },
+    {
+      "kind": "scorer-record",
+      "source_path": "campaign/scores/scorer-run-selection-important-current-1.json",
+      "packaged_path": "campaign/scores/scorer-run-selection-important-current-1.json",
+      "sha256": "6666666666666666666666666666666666666666666666666666666666666666"
+    },
+    {
+      "kind": "prior-rejection",
+      "source_path": "rejections/rejection-v2-example.json",
+      "packaged_path": "evidence/prior-rejections/rejection-v2-example.json",
+      "sha256": "9999999999999999999999999999999999999999999999999999999999999999"
+    },
+    {
+      "kind": "producer-cli",
+      "source_path": "plugins/superzhao-skill-lab/scripts/skill-lab.mjs",
+      "packaged_path": "producer/skill-lab.mjs",
+      "sha256": "2468ace013579bdf2468ace013579bdf2468ace013579bdf2468ace013579bdf"
+    }
+  ],
+  "files": [
+    {
+      "path": "source_SKILL.md",
+      "sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+      "bytes": 512
+    },
+    {
+      "path": "proposed_SKILL.md",
+      "sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+      "bytes": 540
+    },
+    {
+      "path": "proposal/patch.json",
+      "sha256": "3333333333333333333333333333333333333333333333333333333333333333",
+      "bytes": 1024
+    },
+    {
+      "path": "campaign/cases.json",
+      "sha256": "3333333333333333333333333333333333333333333333333333333333333333",
+      "bytes": 1536
+    },
+    {
+      "path": "campaign/samples.json",
+      "sha256": "4444444444444444444444444444444444444444444444444444444444444444",
+      "bytes": 2048
+    },
+    {
+      "path": "campaign/runs/run-selection-important-current-1.json",
+      "sha256": "5555555555555555555555555555555555555555555555555555555555555555",
+      "bytes": 1024
+    },
+    {
+      "path": "campaign/scores/scorer-run-selection-important-current-1.json",
+      "sha256": "6666666666666666666666666666666666666666666666666666666666666666",
+      "bytes": 1024
+    },
+    {
+      "path": "evidence/prior-rejections/rejection-v2-example.json",
+      "sha256": "9999999999999999999999999999999999999999999999999999999999999999",
+      "bytes": 768
+    },
+    {
+      "path": "reports/apply.json",
+      "sha256": "7777777777777777777777777777777777777777777777777777777777777777",
+      "bytes": 1536
+    },
+    {
+      "path": "reports/gate.json",
+      "sha256": "8888888888888888888888888888888888888888888888888888888888888888",
+      "bytes": 2048
+    },
+    {
+      "path": "producer/skill-lab.mjs",
+      "sha256": "2468ace013579bdf2468ace013579bdf2468ace013579bdf2468ace013579bdf",
+      "bytes": 65536
+    }
+  ]
+}

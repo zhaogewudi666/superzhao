@@ -1,0 +1,26 @@
+{
+  "schema": "superzhao.skill-lab.scorer-record/v3",
+  "sample_id": "sample-selection-important-current-1",
+  "run_id": "run-selection-important-current-1",
+  "scorer_run_id": "scorer-run-selection-important-current-1",
+  "scorer_profile_id": "scorer-profile-manual-v1",
+  "scorer_version": "manual-rubric-v1",
+  "scorer_profile": {
+    "path": "campaign/profiles/scorer-manual-v1.json",
+    "sha256": "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210"
+  },
+  "rubric": {
+    "path": "campaign/rubrics/behavior-rubric.md",
+    "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+  },
+  "transcript": {
+    "path": "campaign/transcripts/run-selection-important-current-1.jsonl",
+    "sha256": "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"
+  },
+  "scorer_output": {
+    "path": "campaign/scorer-output/scorer-run-selection-important-current-1.json",
+    "sha256": "13579bdf2468ace013579bdf2468ace013579bdf2468ace013579bdf2468ace0"
+  },
+  "status": "valid",
+  "outcome": "pass"
+}

@@ -1,0 +1,261 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://superzhao.dev/schemas/skill-lab/v3/apply-report.schema.json",
+  "title": "Superzhao Skill Lab v3 apply report",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "status",
+    "proposal_id",
+    "source_sha256",
+    "candidate_sha256",
+    "patch_sha256",
+    "max_edits",
+    "max_added_bytes",
+    "max_removed_bytes",
+    "actual_added_bytes",
+    "actual_removed_bytes",
+    "assumptions",
+    "prior_rejections",
+    "applied_edits"
+  ],
+  "properties": {
+    "schema": {
+      "const": "superzhao.skill-lab.apply-report/v3"
+    },
+    "status": {
+      "const": "applied"
+    },
+    "proposal_id": {
+      "$ref": "#/$defs/stableId"
+    },
+    "source_sha256": {
+      "$ref": "#/$defs/sha256"
+    },
+    "candidate_sha256": {
+      "$ref": "#/$defs/sha256"
+    },
+    "patch_sha256": {
+      "$ref": "#/$defs/sha256"
+    },
+    "max_edits": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 4
+    },
+    "max_added_bytes": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 8192
+    },
+    "max_removed_bytes": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 8192
+    },
+    "actual_added_bytes": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 8192
+    },
+    "actual_removed_bytes": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 8192
+    },
+    "assumptions": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 1000,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/assumption"
+      }
+    },
+    "prior_rejections": {
+      "type": "array",
+      "maxItems": 1000,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/priorRejection"
+      }
+    },
+    "applied_edits": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 4,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/appliedEdit"
+      }
+    }
+  },
+  "$defs": {
+    "stableId": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "path": {
+      "type": "string",
+      "pattern": "^(?!/)(?!.*//)(?!.*(?:^|/)(?:\\.{1,2})(?:/|$))(?!.*\\\\)(?!.*[\\u0000-\\u001f\\u007f])[^/]+(?:/[^/]+)*$"
+    },
+    "nonBlank": {
+      "type": "string",
+      "pattern": "\\S"
+    },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": {
+          "$ref": "#/$defs/path"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "assumption": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["assumption_id", "status", "summary"],
+      "properties": {
+        "assumption_id": {
+          "$ref": "#/$defs/stableId"
+        },
+        "status": {
+          "enum": ["known", "inferred", "open"]
+        },
+        "summary": {
+          "$ref": "#/$defs/nonBlank"
+        }
+      }
+    },
+    "priorRejection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rejection_id", "report", "relationship", "note"],
+      "properties": {
+        "rejection_id": {
+          "$ref": "#/$defs/stableId"
+        },
+        "report": {
+          "$ref": "#/$defs/artifact"
+        },
+        "relationship": {
+          "enum": [
+            "supersedes",
+            "narrows",
+            "unchanged-risk",
+            "not-applicable"
+          ]
+        },
+        "note": {
+          "$ref": "#/$defs/nonBlank"
+        }
+      }
+    },
+    "appliedEdit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "edit_id",
+        "index",
+        "op",
+        "target_sha256",
+        "content_sha256",
+        "original_anchor_start",
+        "original_anchor_end",
+        "application_order",
+        "before_sha256",
+        "after_sha256",
+        "added_bytes",
+        "removed_bytes",
+        "rationale",
+        "supporting_case_ids",
+        "support_count",
+        "source_types"
+      ],
+      "properties": {
+        "edit_id": {
+          "$ref": "#/$defs/stableId"
+        },
+        "index": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4
+        },
+        "op": {
+          "enum": ["append", "insert_after", "replace", "delete"]
+        },
+        "target_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "content_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "original_anchor_start": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "original_anchor_end": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "application_order": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4
+        },
+        "before_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "after_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "added_bytes": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 8192
+        },
+        "removed_bytes": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 8192
+        },
+        "rationale": {
+          "$ref": "#/$defs/nonBlank"
+        },
+        "supporting_case_ids": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 1000,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/stableId"
+          }
+        },
+        "support_count": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000
+        },
+        "source_types": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 4,
+          "uniqueItems": true,
+          "items": {
+            "enum": ["failure", "success", "rejection", "human-constraint"]
+          }
+        }
+      }
+    }
+  }
+}

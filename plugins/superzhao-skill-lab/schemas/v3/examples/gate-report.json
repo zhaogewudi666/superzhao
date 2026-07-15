@@ -1,0 +1,107 @@
+{
+  "schema": "superzhao.skill-lab.gate-report/v3",
+  "campaign_id": "campaign-v3-example",
+  "source_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+  "candidate_sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+  "cases_sha256": "3333333333333333333333333333333333333333333333333333333333333333",
+  "samples_sha256": "4444444444444444444444444444444444444444444444444444444444444444",
+  "required_valid": 5,
+  "train_rows": 0,
+  "selection": {
+    "status": "selection_pass",
+    "cases": [
+      {
+        "case_id": "selection-important-1",
+        "case_type": "important",
+        "current": {
+          "pass": 3,
+          "fail": 2,
+          "invalid": 0,
+          "indeterminate": 0,
+          "valid": 5
+        },
+        "candidate": {
+          "pass": 5,
+          "fail": 0,
+          "invalid": 0,
+          "indeterminate": 0,
+          "valid": 5
+        },
+        "repeated_current_failure_codes": [
+          {
+            "failure_code": "KNOWN_GAP",
+            "count": 2
+          }
+        ],
+        "reasons": []
+      },
+      {
+        "case_id": "selection-control-1",
+        "case_type": "control",
+        "current": {
+          "pass": 5,
+          "fail": 0,
+          "invalid": 0,
+          "indeterminate": 0,
+          "valid": 5
+        },
+        "candidate": {
+          "pass": 5,
+          "fail": 0,
+          "invalid": 0,
+          "indeterminate": 0,
+          "valid": 5
+        },
+        "repeated_current_failure_codes": [],
+        "reasons": []
+      }
+    ],
+    "reasons": []
+  },
+  "final": {
+    "status": "final_accept",
+    "cases": [
+      {
+        "case_id": "test-important-1",
+        "case_type": "important",
+        "current": {
+          "pass": 4,
+          "fail": 1,
+          "invalid": 0,
+          "indeterminate": 0,
+          "valid": 5
+        },
+        "candidate": {
+          "pass": 5,
+          "fail": 0,
+          "invalid": 0,
+          "indeterminate": 0,
+          "valid": 5
+        },
+        "repeated_current_failure_codes": [],
+        "reasons": []
+      },
+      {
+        "case_id": "test-control-1",
+        "case_type": "control",
+        "current": {
+          "pass": 4,
+          "fail": 1,
+          "invalid": 0,
+          "indeterminate": 0,
+          "valid": 5
+        },
+        "candidate": {
+          "pass": 4,
+          "fail": 1,
+          "invalid": 0,
+          "indeterminate": 0,
+          "valid": 5
+        },
+        "repeated_current_failure_codes": [],
+        "reasons": []
+      }
+    ],
+    "reasons": []
+  }
+}

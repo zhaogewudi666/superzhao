@@ -1,0 +1,98 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://superzhao.dev/schemas/skill-lab/v3/actor-run.schema.json",
+  "title": "Superzhao Skill Lab v3 actor run",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "sample_id",
+    "run_id",
+    "actor_instance_id",
+    "actor_profile_id",
+    "case_id",
+    "split",
+    "case_type",
+    "arm",
+    "skill_sha256",
+    "actor_profile",
+    "prompt",
+    "environment",
+    "harness_model_profile",
+    "transcript"
+  ],
+  "properties": {
+    "schema": {
+      "const": "superzhao.skill-lab.actor-run/v3"
+    },
+    "sample_id": {
+      "$ref": "#/$defs/stableId"
+    },
+    "run_id": {
+      "$ref": "#/$defs/stableId"
+    },
+    "actor_instance_id": {
+      "$ref": "#/$defs/stableId"
+    },
+    "actor_profile_id": {
+      "$ref": "#/$defs/stableId"
+    },
+    "case_id": {
+      "$ref": "#/$defs/stableId"
+    },
+    "split": {
+      "enum": ["train", "selection", "test"]
+    },
+    "case_type": {
+      "enum": ["important", "control"]
+    },
+    "arm": {
+      "enum": ["current", "candidate"]
+    },
+    "skill_sha256": {
+      "$ref": "#/$defs/sha256"
+    },
+    "actor_profile": {
+      "$ref": "#/$defs/artifact"
+    },
+    "prompt": {
+      "$ref": "#/$defs/artifact"
+    },
+    "environment": {
+      "$ref": "#/$defs/artifact"
+    },
+    "harness_model_profile": {
+      "$ref": "#/$defs/artifact"
+    },
+    "transcript": {
+      "$ref": "#/$defs/artifact"
+    }
+  },
+  "$defs": {
+    "stableId": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "path": {
+      "type": "string",
+      "pattern": "^(?!/)(?!.*//)(?!.*(?:^|/)(?:\\.{1,2})(?:/|$))(?!.*\\\\)(?!.*[\\u0000-\\u001f\\u007f])[^/]+(?:/[^/]+)*$"
+    },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": {
+          "$ref": "#/$defs/path"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    }
+  }
+}

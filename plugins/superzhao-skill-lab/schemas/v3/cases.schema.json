@@ -1,0 +1,157 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://superzhao.dev/schemas/skill-lab/v3/cases.schema.json",
+  "title": "Superzhao Skill Lab v3 case inventory",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "campaign_id", "required_valid", "cases"],
+  "properties": {
+    "schema": {
+      "const": "superzhao.skill-lab.cases/v3"
+    },
+    "campaign_id": {
+      "$ref": "#/$defs/stableId"
+    },
+    "required_valid": {
+      "type": "integer",
+      "minimum": 5,
+      "maximum": 20
+    },
+    "cases": {
+      "type": "array",
+      "minItems": 4,
+      "maxItems": 1000,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/case"
+      }
+    }
+  },
+  "allOf": [
+    {
+      "properties": {
+        "cases": {
+          "contains": {
+            "type": "object",
+            "required": ["split", "case_type"],
+            "properties": {
+              "split": {
+                "const": "selection"
+              },
+              "case_type": {
+                "const": "important"
+              }
+            }
+          },
+          "minContains": 1
+        }
+      }
+    },
+    {
+      "properties": {
+        "cases": {
+          "contains": {
+            "type": "object",
+            "required": ["split", "case_type"],
+            "properties": {
+              "split": {
+                "const": "selection"
+              },
+              "case_type": {
+                "const": "control"
+              }
+            }
+          },
+          "minContains": 1
+        }
+      }
+    },
+    {
+      "properties": {
+        "cases": {
+          "contains": {
+            "type": "object",
+            "required": ["split", "case_type"],
+            "properties": {
+              "split": {
+                "const": "test"
+              },
+              "case_type": {
+                "const": "important"
+              }
+            }
+          },
+          "minContains": 1
+        }
+      }
+    },
+    {
+      "properties": {
+        "cases": {
+          "contains": {
+            "type": "object",
+            "required": ["split", "case_type"],
+            "properties": {
+              "split": {
+                "const": "test"
+              },
+              "case_type": {
+                "const": "control"
+              }
+            }
+          },
+          "minContains": 1
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "stableId": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "path": {
+      "type": "string",
+      "pattern": "^(?!/)(?!.*//)(?!.*(?:^|/)(?:\\.{1,2})(?:/|$))(?!.*\\\\)(?!.*[\\u0000-\\u001f\\u007f])[^/]+(?:/[^/]+)*$"
+    },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": {
+          "$ref": "#/$defs/path"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "case": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["case_id", "split", "case_type", "prompt", "rubric"],
+      "properties": {
+        "case_id": {
+          "$ref": "#/$defs/stableId"
+        },
+        "split": {
+          "enum": ["train", "selection", "test"]
+        },
+        "case_type": {
+          "enum": ["important", "control"]
+        },
+        "prompt": {
+          "$ref": "#/$defs/artifact"
+        },
+        "rubric": {
+          "$ref": "#/$defs/artifact"
+        }
+      }
+    }
+  }
+}

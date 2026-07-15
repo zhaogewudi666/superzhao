@@ -1,0 +1,32 @@
+{
+  "schema": "superzhao.skill-lab.actor-run/v3",
+  "sample_id": "sample-selection-important-current-1",
+  "run_id": "run-selection-important-current-1",
+  "actor_instance_id": "actor-instance-selection-important-current-1",
+  "actor_profile_id": "actor-profile-codex-gpt5-v1",
+  "case_id": "selection-important-1",
+  "split": "selection",
+  "case_type": "important",
+  "arm": "current",
+  "skill_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+  "actor_profile": {
+    "path": "campaign/profiles/actor-codex-gpt5-v1.json",
+    "sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+  },
+  "prompt": {
+    "path": "campaign/prompts/selection-important-1.md",
+    "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  },
+  "environment": {
+    "path": "campaign/environment.json",
+    "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  "harness_model_profile": {
+    "path": "campaign/profiles/codex-gpt5.json",
+    "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+  },
+  "transcript": {
+    "path": "campaign/transcripts/run-selection-important-current-1.jsonl",
+    "sha256": "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"
+  }
+}

@@ -1,0 +1,160 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://superzhao.dev/schemas/skill-lab/v3/scorer-record.schema.json",
+  "title": "Superzhao Skill Lab v3 scorer record",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "sample_id",
+    "run_id",
+    "scorer_run_id",
+    "scorer_profile_id",
+    "scorer_version",
+    "scorer_profile",
+    "rubric",
+    "transcript",
+    "scorer_output",
+    "status"
+  ],
+  "properties": {
+    "schema": {
+      "const": "superzhao.skill-lab.scorer-record/v3"
+    },
+    "sample_id": {
+      "$ref": "#/$defs/stableId"
+    },
+    "run_id": {
+      "$ref": "#/$defs/stableId"
+    },
+    "scorer_run_id": {
+      "$ref": "#/$defs/stableId"
+    },
+    "scorer_profile_id": {
+      "$ref": "#/$defs/stableId"
+    },
+    "scorer_version": {
+      "$ref": "#/$defs/nonBlank"
+    },
+    "scorer_profile": {
+      "$ref": "#/$defs/artifact"
+    },
+    "rubric": {
+      "$ref": "#/$defs/artifact"
+    },
+    "transcript": {
+      "$ref": "#/$defs/artifact"
+    },
+    "scorer_output": {
+      "$ref": "#/$defs/artifact"
+    },
+    "status": {
+      "enum": ["valid", "invalid", "indeterminate"]
+    },
+    "outcome": {
+      "enum": ["pass", "fail"]
+    },
+    "failure_code": {
+      "$ref": "#/$defs/failureCode"
+    },
+    "reason": {
+      "$ref": "#/$defs/nonBlank"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "required": ["status"],
+        "properties": {
+          "status": {
+            "const": "valid"
+          }
+        }
+      },
+      "then": {
+        "required": ["outcome"],
+        "not": {
+          "required": ["reason"]
+        },
+        "allOf": [
+          {
+            "if": {
+              "required": ["outcome"],
+              "properties": {
+                "outcome": {
+                  "const": "fail"
+                }
+              }
+            },
+            "then": {
+              "required": ["failure_code"]
+            }
+          },
+          {
+            "if": {
+              "required": ["outcome"],
+              "properties": {
+                "outcome": {
+                  "const": "pass"
+                }
+              }
+            },
+            "then": {
+              "not": {
+                "required": ["failure_code"]
+              }
+            }
+          }
+        ]
+      },
+      "else": {
+        "required": ["reason"],
+        "not": {
+          "anyOf": [
+            {
+              "required": ["outcome"]
+            },
+            {
+              "required": ["failure_code"]
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "stableId": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
+    },
+    "failureCode": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "path": {
+      "type": "string",
+      "pattern": "^(?!/)(?!.*//)(?!.*(?:^|/)(?:\\.{1,2})(?:/|$))(?!.*\\\\)(?!.*[\\u0000-\\u001f\\u007f])[^/]+(?:/[^/]+)*$"
+    },
+    "nonBlank": {
+      "type": "string",
+      "pattern": "\\S"
+    },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": {
+          "$ref": "#/$defs/path"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    }
+  }
+}

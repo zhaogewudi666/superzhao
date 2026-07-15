@@ -1,0 +1,46 @@
+{
+  "schema": "superzhao.skill-lab.patch/v3",
+  "proposal_id": "proposal-v3-example",
+  "source_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+  "max_edits": 1,
+  "max_added_bytes": 1024,
+  "max_removed_bytes": 1024,
+  "assumptions": [
+    {
+      "assumption_id": "assumption-body-gap",
+      "status": "known",
+      "summary": "The observed behavior gap is confined to body guidance."
+    }
+  ],
+  "prior_rejections": [
+    {
+      "rejection_id": "rejection-v2-example",
+      "report": {
+        "path": "rejections/rejection-v2-example.json",
+        "sha256": "9999999999999999999999999999999999999999999999999999999999999999"
+      },
+      "relationship": "narrows",
+      "note": "This proposal narrows the previously rejected edit surface."
+    }
+  ],
+  "edits": [
+    {
+      "edit_id": "edit-workflow-gap",
+      "op": "replace",
+      "target": "old workflow guidance",
+      "content": "new evidence-backed workflow guidance",
+      "rationale": "Close the repeated workflow gap while preserving successful controls.",
+      "supporting_case_ids": [
+        "selection-important-1",
+        "selection-control-1"
+      ],
+      "support_count": 2,
+      "source_types": [
+        "failure",
+        "success",
+        "rejection",
+        "human-constraint"
+      ]
+    }
+  ]
+}

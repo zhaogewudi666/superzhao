@@ -1,0 +1,66 @@
+{
+  "schema_version": 2,
+  "decision": "applied",
+  "source_sha256": "1d927a255384870efefd2686d7ae9d18d6b7bae5da2a4568b7fa21ededb40fd6",
+  "candidate_sha256": "b3800c9dfc23cb4e9b7d8efc61eb5700f6773053d40e8c536f7b48696d3183a0",
+  "edits_sha256": "78ae7cc361a8b3c209c5f5257d98f60f65d298843ec988ed9bbca2fa02b4dd2f",
+  "max_edits": 4,
+  "max_added_bytes": 1024,
+  "max_removed_bytes": 1024,
+  "actual_added_bytes": 56,
+  "actual_removed_bytes": 18,
+  "applied_edits": [
+    {
+      "index": 1,
+      "op": "replace",
+      "target_sha256": "c9fbd865f5b1419c9e65d4381bfee26fb252a303d4cdd689aed446bf252ca847",
+      "content_sha256": "cb0208b0b1fa06bc59f85c8b2be1e45ff2ef6ddbf0cef02e9f276b8208ea48ab",
+      "original_anchor_start": 109,
+      "original_anchor_end": 117,
+      "application_order": 3,
+      "before_sha256": "c728fecd4bdc70aa41dce42426008c582bea7c809a9f2207eed586230502814b",
+      "after_sha256": "5d253d72ed8ee39dc1a553d5ec8f2d15ac30d5665d6f3f60a71f3ec3b3099333",
+      "added_bytes": 8,
+      "removed_bytes": 8
+    },
+    {
+      "index": 2,
+      "op": "delete",
+      "target_sha256": "5dbe6af8d3a2a31f6696ebdae9e590977a19b827ec8e0a22ea1e3decf1a79b77",
+      "content_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "original_anchor_start": 118,
+      "original_anchor_end": 128,
+      "application_order": 2,
+      "before_sha256": "c71736311be8d182bb2349588bb89211d79cfef4ae9b20d6c6dcbd6a544e9224",
+      "after_sha256": "c728fecd4bdc70aa41dce42426008c582bea7c809a9f2207eed586230502814b",
+      "added_bytes": 0,
+      "removed_bytes": 10
+    },
+    {
+      "index": 3,
+      "op": "insert_after",
+      "target_sha256": "7f7f6b99828fafdca17e1c9b23bb7fe1c757f302b6a840d41b8fa1667089d328",
+      "content_sha256": "e936fafc1655725d19b9cdb5d6dae9302f2a26dc9e82ba595c5a7efea61ec1c5",
+      "original_anchor_start": 96,
+      "original_anchor_end": 108,
+      "application_order": 4,
+      "before_sha256": "5d253d72ed8ee39dc1a553d5ec8f2d15ac30d5665d6f3f60a71f3ec3b3099333",
+      "after_sha256": "b3800c9dfc23cb4e9b7d8efc61eb5700f6773053d40e8c536f7b48696d3183a0",
+      "added_bytes": 19,
+      "removed_bytes": 0
+    },
+    {
+      "index": 4,
+      "op": "append",
+      "target_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "content_sha256": "d2cd2441bcc82ac00c10cd8707e53ae3ce96a20a1db7a156d69ce99b7621d284",
+      "original_anchor_start": 129,
+      "original_anchor_end": 129,
+      "application_order": 1,
+      "before_sha256": "1d927a255384870efefd2686d7ae9d18d6b7bae5da2a4568b7fa21ededb40fd6",
+      "after_sha256": "c71736311be8d182bb2349588bb89211d79cfef4ae9b20d6c6dcbd6a544e9224",
+      "added_bytes": 29,
+      "removed_bytes": 0
+    }
+  ]
+}

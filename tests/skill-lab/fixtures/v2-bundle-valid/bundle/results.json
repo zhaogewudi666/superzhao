@@ -1,0 +1,277 @@
+{
+  "schema_version": 2,
+  "campaign_id": "fixture-campaign",
+  "artifacts": {
+    "source": {
+      "path": "SKILL.md",
+      "sha256": "1d927a255384870efefd2686d7ae9d18d6b7bae5da2a4568b7fa21ededb40fd6"
+    },
+    "candidate": {
+      "path": "candidate.md",
+      "sha256": "b3800c9dfc23cb4e9b7d8efc61eb5700f6773053d40e8c536f7b48696d3183a0"
+    },
+    "scenario": {
+      "path": "campaign/scenario.bin",
+      "sha256": "8a58ed8f3e46926109b6d1ca5d6eaa5a4f078d5cffb18337b705900c43579595"
+    },
+    "rubric": {
+      "path": "campaign/rubric.bin",
+      "sha256": "e0a8c80deef84bc3344aa68a547e0a3e32e4b28c27e2361ab7fb55ee77983fda"
+    },
+    "environment": {
+      "path": "campaign/environment.bin",
+      "sha256": "1e5ce711a47c4a102fc52c88c783c2ed78065e9af6ad936bf55bd3c27f6c6c90"
+    }
+  },
+  "required_valid": 5,
+  "samples": [
+    {
+      "id": "important-current-1",
+      "actor_id": "current-actor-1",
+      "evidence_path": "raw-evidence/selection-current-1.bin",
+      "evidence_sha256": "72d9907ad9cce64187a6441fb17cd5f939e4cc34150f256e4d0d248e880a4347",
+      "split": "selection",
+      "case_id": "important-1",
+      "case_type": "important",
+      "arm": "current",
+      "outcome": "fail",
+      "failure_code": "KNOWN_GAP"
+    },
+    {
+      "id": "important-candidate-1",
+      "actor_id": "candidate-actor-1",
+      "evidence_path": "raw-evidence/selection-candidate-1.bin",
+      "evidence_sha256": "fc7c30d0c626a1cb3baf5e9ff09054e58d90485e7624b7c4bc32df1c73c5b2a4",
+      "split": "selection",
+      "case_id": "important-1",
+      "case_type": "important",
+      "arm": "candidate",
+      "outcome": "pass"
+    },
+    {
+      "id": "control-current-1",
+      "actor_id": "current-actor-1",
+      "evidence_path": "raw-evidence/selection-current-1.bin",
+      "evidence_sha256": "72d9907ad9cce64187a6441fb17cd5f939e4cc34150f256e4d0d248e880a4347",
+      "split": "selection",
+      "case_id": "control-1",
+      "case_type": "control",
+      "arm": "current",
+      "outcome": "pass"
+    },
+    {
+      "id": "control-candidate-1",
+      "actor_id": "candidate-actor-1",
+      "evidence_path": "raw-evidence/selection-candidate-1.bin",
+      "evidence_sha256": "fc7c30d0c626a1cb3baf5e9ff09054e58d90485e7624b7c4bc32df1c73c5b2a4",
+      "split": "selection",
+      "case_id": "control-1",
+      "case_type": "control",
+      "arm": "candidate",
+      "outcome": "pass"
+    },
+    {
+      "id": "important-current-2",
+      "actor_id": "current-actor-2",
+      "evidence_path": "raw-evidence/selection-current-2.bin",
+      "evidence_sha256": "02a98b9a43794f44f650b4c3375b7341dba4931ea469ca1d0780b848be967b93",
+      "split": "selection",
+      "case_id": "important-1",
+      "case_type": "important",
+      "arm": "current",
+      "outcome": "fail",
+      "failure_code": "KNOWN_GAP"
+    },
+    {
+      "id": "important-candidate-2",
+      "actor_id": "candidate-actor-2",
+      "evidence_path": "raw-evidence/selection-candidate-2.bin",
+      "evidence_sha256": "184ef0ed4ad8904c8cc8cabc7c586b66a3ca7d68cee7a1a52449363cb8276a1d",
+      "split": "selection",
+      "case_id": "important-1",
+      "case_type": "important",
+      "arm": "candidate",
+      "outcome": "pass"
+    },
+    {
+      "id": "control-current-2",
+      "actor_id": "current-actor-2",
+      "evidence_path": "raw-evidence/selection-current-2.bin",
+      "evidence_sha256": "02a98b9a43794f44f650b4c3375b7341dba4931ea469ca1d0780b848be967b93",
+      "split": "selection",
+      "case_id": "control-1",
+      "case_type": "control",
+      "arm": "current",
+      "outcome": "pass"
+    },
+    {
+      "id": "control-candidate-2",
+      "actor_id": "candidate-actor-2",
+      "evidence_path": "raw-evidence/selection-candidate-2.bin",
+      "evidence_sha256": "184ef0ed4ad8904c8cc8cabc7c586b66a3ca7d68cee7a1a52449363cb8276a1d",
+      "split": "selection",
+      "case_id": "control-1",
+      "case_type": "control",
+      "arm": "candidate",
+      "outcome": "pass"
+    },
+    {
+      "id": "important-current-3",
+      "actor_id": "current-actor-3",
+      "evidence_path": "raw-evidence/selection-current-3.bin",
+      "evidence_sha256": "6e7c4f79e8e3373bcaf29b56c9f6afcb1cbcd5b6179108998549a0169408a612",
+      "split": "selection",
+      "case_id": "important-1",
+      "case_type": "important",
+      "arm": "current",
+      "outcome": "fail",
+      "failure_code": "KNOWN_GAP"
+    },
+    {
+      "id": "important-candidate-3",
+      "actor_id": "candidate-actor-3",
+      "evidence_path": "raw-evidence/selection-candidate-3.bin",
+      "evidence_sha256": "4f6f62a46eaccf21fa5b5c6e40dbb9b33d2a4184e4c3aa048a274eda3f26cfe7",
+      "split": "selection",
+      "case_id": "important-1",
+      "case_type": "important",
+      "arm": "candidate",
+      "outcome": "pass"
+    },
+    {
+      "id": "control-current-3",
+      "actor_id": "current-actor-3",
+      "evidence_path": "raw-evidence/selection-current-3.bin",
+      "evidence_sha256": "6e7c4f79e8e3373bcaf29b56c9f6afcb1cbcd5b6179108998549a0169408a612",
+      "split": "selection",
+      "case_id": "control-1",
+      "case_type": "control",
+      "arm": "current",
+      "outcome": "pass"
+    },
+    {
+      "id": "control-candidate-3",
+      "actor_id": "candidate-actor-3",
+      "evidence_path": "raw-evidence/selection-candidate-3.bin",
+      "evidence_sha256": "4f6f62a46eaccf21fa5b5c6e40dbb9b33d2a4184e4c3aa048a274eda3f26cfe7",
+      "split": "selection",
+      "case_id": "control-1",
+      "case_type": "control",
+      "arm": "candidate",
+      "outcome": "pass"
+    },
+    {
+      "id": "important-current-4",
+      "actor_id": "current-actor-4",
+      "evidence_path": "raw-evidence/selection-current-4.bin",
+      "evidence_sha256": "89279b2463975fbd2ca0049b2c85f776d7027352a472d7bddd6d937b1a4f71a9",
+      "split": "selection",
+      "case_id": "important-1",
+      "case_type": "important",
+      "arm": "current",
+      "outcome": "fail",
+      "failure_code": "KNOWN_GAP"
+    },
+    {
+      "id": "important-candidate-4",
+      "actor_id": "candidate-actor-4",
+      "evidence_path": "raw-evidence/selection-candidate-4.bin",
+      "evidence_sha256": "8207012e2316f586a06d62923f13adfbbc75bb4eace911796a26c28ccd01a570",
+      "split": "selection",
+      "case_id": "important-1",
+      "case_type": "important",
+      "arm": "candidate",
+      "outcome": "pass"
+    },
+    {
+      "id": "control-current-4",
+      "actor_id": "current-actor-4",
+      "evidence_path": "raw-evidence/selection-current-4.bin",
+      "evidence_sha256": "89279b2463975fbd2ca0049b2c85f776d7027352a472d7bddd6d937b1a4f71a9",
+      "split": "selection",
+      "case_id": "control-1",
+      "case_type": "control",
+      "arm": "current",
+      "outcome": "pass"
+    },
+    {
+      "id": "control-candidate-4",
+      "actor_id": "candidate-actor-4",
+      "evidence_path": "raw-evidence/selection-candidate-4.bin",
+      "evidence_sha256": "8207012e2316f586a06d62923f13adfbbc75bb4eace911796a26c28ccd01a570",
+      "split": "selection",
+      "case_id": "control-1",
+      "case_type": "control",
+      "arm": "candidate",
+      "outcome": "pass"
+    },
+    {
+      "id": "important-current-5",
+      "actor_id": "current-actor-5",
+      "evidence_path": "raw-evidence/selection-current-5.bin",
+      "evidence_sha256": "c65a8f5350f08e7d47c31b9fd311282b357f638a369d58c3359c792357eb7204",
+      "split": "selection",
+      "case_id": "important-1",
+      "case_type": "important",
+      "arm": "current",
+      "outcome": "fail",
+      "failure_code": "KNOWN_GAP"
+    },
+    {
+      "id": "important-candidate-5",
+      "actor_id": "candidate-actor-5",
+      "evidence_path": "raw-evidence/selection-candidate-5.bin",
+      "evidence_sha256": "377a12234424aef825ec989fedc03c494a0403743b21a3500ea41f774b2c218b",
+      "split": "selection",
+      "case_id": "important-1",
+      "case_type": "important",
+      "arm": "candidate",
+      "outcome": "pass"
+    },
+    {
+      "id": "control-current-5",
+      "actor_id": "current-actor-5",
+      "evidence_path": "raw-evidence/selection-current-5.bin",
+      "evidence_sha256": "c65a8f5350f08e7d47c31b9fd311282b357f638a369d58c3359c792357eb7204",
+      "split": "selection",
+      "case_id": "control-1",
+      "case_type": "control",
+      "arm": "current",
+      "outcome": "pass"
+    },
+    {
+      "id": "control-candidate-5",
+      "actor_id": "candidate-actor-5",
+      "evidence_path": "raw-evidence/selection-candidate-5.bin",
+      "evidence_sha256": "377a12234424aef825ec989fedc03c494a0403743b21a3500ea41f774b2c218b",
+      "split": "selection",
+      "case_id": "control-1",
+      "case_type": "control",
+      "arm": "candidate",
+      "outcome": "pass"
+    },
+    {
+      "id": "ignored-test-current",
+      "actor_id": "test-current-actor",
+      "evidence_path": "raw-evidence/test-current-evidence.bin",
+      "evidence_sha256": "aa4f6f4f57154bdb425e1247067c979bed6f4da9d433268836ba13426eea1ed9",
+      "split": "test",
+      "case_id": "important-test-1",
+      "case_type": "important",
+      "arm": "current",
+      "outcome": "pass"
+    },
+    {
+      "id": "ignored-test-candidate",
+      "actor_id": "test-candidate-actor",
+      "evidence_path": "raw-evidence/test-candidate-evidence.bin",
+      "evidence_sha256": "a6f667659f89e5eb4c1f3c4dc818d5f4eba62da38159d80c037eba9c0af4c608",
+      "split": "test",
+      "case_id": "important-test-1",
+      "case_type": "important",
+      "arm": "candidate",
+      "outcome": "fail",
+      "failure_code": "KNOWN_GAP"
+    }
+  ]
+}

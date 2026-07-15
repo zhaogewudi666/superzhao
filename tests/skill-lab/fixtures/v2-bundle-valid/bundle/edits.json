@@ -1,0 +1,29 @@
+{
+  "schema_version": 2,
+  "source_sha256": "1d927a255384870efefd2686d7ae9d18d6b7bae5da2a4568b7fa21ededb40fd6",
+  "max_edits": 4,
+  "max_added_bytes": 1024,
+  "max_removed_bytes": 1024,
+  "edits": [
+    {
+      "op": "replace",
+      "target": "old text",
+      "content": "new text"
+    },
+    {
+      "op": "delete",
+      "target": "remove me\n",
+      "content": ""
+    },
+    {
+      "op": "insert_after",
+      "target": "## Workflow\n",
+      "content": "\ninserted guidance\n"
+    },
+    {
+      "op": "append",
+      "target": "",
+      "content": "## Added\n\nappended guidance\n\n"
+    }
+  ]
+}

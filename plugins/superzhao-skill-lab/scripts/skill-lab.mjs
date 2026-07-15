@@ -17,6 +17,24 @@ import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
 const HARD_MAX_EDITS = 4;
 const HARD_MAX_EDIT_BYTES = 4096;
 const HARD_MAX_PATCH_BYTES = 8192;
+const MAX_INPUT_BYTES = 8 * 1024 * 1024;
+const MAX_CAMPAIGN_BYTES = 64 * 1024 * 1024;
+const MAX_BUNDLE_BYTES = 96 * 1024 * 1024;
+const MAX_SAMPLE_ROWS = 1000;
+const MIN_REQUIRED_VALID = 5;
+const MAX_REQUIRED_VALID = 20;
+const PATCH_SCHEMA_V3 = "superzhao.skill-lab.patch/v3";
+const APPLY_REPORT_SCHEMA_V3 = "superzhao.skill-lab.apply-report/v3";
+const DOCTOR_REPORT_SCHEMA_V3 = "superzhao.skill-lab.doctor-report/v3";
+const EXIT_CODES = Object.freeze({
+  success: 0,
+  usage_or_schema: 2,
+  unsafe_path_or_integrity: 3,
+  selection_rejection: 4,
+  final_rejection: 5,
+  publication_failure: 6,
+  unsupported_preflight: 7,
+});
 const HASH_PATTERN = /^[0-9a-f]{64}$/;
 const STABLE_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
 const FAILURE_CODE_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
@@ -33,14 +51,51 @@ const PROTECTED_MARKERS = [
 const ALL_MARKERS = PROTECTED_MARKERS.flat();
 
 class CliError extends Error {
-  constructor(message, exitCode = 2) {
+  constructor(
+    message,
+    exitCode = EXIT_CODES.usage_or_schema,
+    status = exitCode === EXIT_CODES.usage_or_schema ? "usage_or_schema" : null,
+  ) {
     super(message);
     this.exitCode = exitCode;
+    this.status = status;
   }
+}
+
+function classifiedError(status, message) {
+  return new CliError(message, EXIT_CODES[status], status);
+}
+
+function reclassify(error, status) {
+  const message = error instanceof Error ? error.message : String(error);
+  return classifiedError(status, message);
 }
 
 function sha256(value) {
   return createHash("sha256").update(value).digest("hex");
+}
+
+function validateRuntime() {
+  const match = /^v(\d+)\./.exec(process.version);
+  const nodeMajor = match ? Number(match[1]) : NaN;
+  if (!new Set([20, 22]).has(nodeMajor)) {
+    throw classifiedError(
+      "unsupported_preflight",
+      `unsupported Node.js runtime ${process.version}; expected major 20 or 22`,
+    );
+  }
+  if (!new Set(["darwin", "linux"]).has(process.platform)) {
+    throw classifiedError(
+      "unsupported_preflight",
+      `unsupported platform ${process.platform}; expected darwin or linux`,
+    );
+  }
+  return {
+    node_major: nodeMajor,
+    node_version: process.version,
+    platform: process.platform,
+    architecture: process.arch,
+  };
 }
 
 function asciiCompare(left, right) {
@@ -227,6 +282,37 @@ function readRegularFile(path, label) {
   return readFileSync(path);
 }
 
+function readLimitedInput(path, label, { allowSymbolicLinkPeek = false } = {}) {
+  let stat;
+  try {
+    stat = lstatSync(path);
+  } catch {
+    throw new CliError(`${label} does not exist: ${path}`);
+  }
+  if (stat.isSymbolicLink() && allowSymbolicLinkPeek) {
+    try {
+      stat = lstatSync(realpathSync(path));
+    } catch {
+      throw new CliError(`${label} symbolic-link target does not exist: ${path}`);
+    }
+  }
+  if (stat.isSymbolicLink() || !stat.isFile()) {
+    throw new CliError(`${label} must be a physical regular file: ${path}`);
+  }
+  if (!Number.isSafeInteger(stat.size) || stat.size > MAX_INPUT_BYTES) {
+    throw new CliError(
+      `${label} exceeds the ${MAX_INPUT_BYTES}-byte (8 MiB) input limit`,
+    );
+  }
+  const bytes = readFileSync(path);
+  if (bytes.length > MAX_INPUT_BYTES) {
+    throw new CliError(
+      `${label} exceeds the ${MAX_INPUT_BYTES}-byte (8 MiB) input limit`,
+    );
+  }
+  return bytes;
+}
+
 function parseJson(buffer, label) {
   try {
     const text = decodeUtf8(buffer, label);
@@ -320,9 +406,21 @@ function bestEffortRemoveTree(path) {
   }
 }
 
-function writeTwoOutputs(candidatePath, candidate, reportPath, report, inputs) {
-  assertNewPhysicalOutput(candidatePath, inputs, "candidate output");
-  assertNewPhysicalOutput(reportPath, [...inputs, candidatePath], "report output");
+function writeTwoOutputs(
+  candidatePath,
+  candidate,
+  reportPath,
+  report,
+  inputs,
+  publicationStatus = null,
+) {
+  try {
+    assertNewPhysicalOutput(candidatePath, inputs, "candidate output");
+    assertNewPhysicalOutput(reportPath, [...inputs, candidatePath], "report output");
+  } catch (error) {
+    if (publicationStatus) throw reclassify(error, publicationStatus);
+    throw error;
+  }
   let candidateTempDir;
   let reportTempDir;
   let candidateTemp;
@@ -345,7 +443,9 @@ function writeTwoOutputs(candidatePath, candidate, reportPath, report, inputs) {
     if (candidatePublished) removePublishedIfOwned(candidatePath, candidateTemp);
     bestEffortRemoveTree(candidateTempDir);
     bestEffortRemoveTree(reportTempDir);
-    throw new CliError(`could not publish apply artifacts: ${error.message}`);
+    const message = `could not publish apply artifacts: ${error.message}`;
+    if (publicationStatus) throw classifiedError(publicationStatus, message);
+    throw new CliError(message);
   }
   bestEffortRemoveTree(candidateTempDir);
   bestEffortRemoveTree(reportTempDir);
@@ -421,6 +521,7 @@ function parseFrontmatterString(raw, label) {
   return value;
 }
 
+// Retained verbatim in behavior for the temporary v2 apply/gate/stage bridge.
 function validateFrontmatter(content) {
   if (content.includes("\r")) {
     throw new CliError("Skill files must use LF line endings without carriage returns");
@@ -468,6 +569,103 @@ function validateFrontmatter(content) {
   return { start: 0, end: closingStart + 5 };
 }
 
+function parsePortableBlockScalar(indicator, lines, label) {
+  if (!/^[|>](?:(?:[1-9][+-]?)|(?:[+-][1-9]?))?(?:[ \t]+#.*)?$/.test(indicator)) {
+    throw new CliError(`Skill frontmatter ${label} has an invalid block scalar indicator`);
+  }
+  const nonBlank = lines.filter((line) => line.trim());
+  if (nonBlank.length === 0 || nonBlank.some((line) => !/^[ \t]+/.test(line))) {
+    throw new CliError(`Skill frontmatter ${label} block scalar must contain indented text`);
+  }
+  const indentation = Math.min(
+    ...nonBlank.map((line) => /^[ \t]*/.exec(line)[0].length),
+  );
+  const values = lines.map((line) => line.slice(Math.min(indentation, line.length)));
+  const value = indicator.startsWith(">")
+    ? values.map((line) => line.trim()).filter(Boolean).join(" ")
+    : values.join("\n").trim();
+  if (!value || hasUnsupportedFrontmatterCharacter(value)) {
+    throw new CliError(`Skill frontmatter ${label} block scalar must contain portable text`);
+  }
+  return value;
+}
+
+function validateFrontmatterV3(content) {
+  if (content.includes("\r")) {
+    throw new CliError("Skill files must use LF line endings without carriage returns");
+  }
+  if (!content.startsWith("---\n")) {
+    throw new CliError("Skill frontmatter must begin with an exact --- delimiter");
+  }
+  const closingStart = content.indexOf("\n---\n", 4);
+  if (closingStart === -1) {
+    throw new CliError("Skill frontmatter is missing its closing --- delimiter");
+  }
+  const end = closingStart + 5;
+  if (!content.slice(end).trim()) {
+    throw new CliError("Skill must contain a non-empty body after frontmatter");
+  }
+  const header = content.slice(4, closingStart);
+  if (ALL_MARKERS.some((marker) => header.includes(marker))) {
+    throw new CliError("Skill frontmatter contains a protected marker");
+  }
+
+  const lines = header.split("\n");
+  const topLevelKeys = new Set();
+  const requiredValues = new Map();
+  for (let index = 0; index < lines.length;) {
+    const line = lines[index];
+    if (!line.trim()) {
+      index += 1;
+      continue;
+    }
+    if (/^[ \t]/.test(line)) {
+      throw new CliError(`invalid orphaned Skill frontmatter continuation: ${line}`);
+    }
+    const match = /^([A-Za-z0-9_-]+):[ \t]*(.*)$/.exec(line);
+    if (!match) throw new CliError(`invalid Skill frontmatter line: ${line}`);
+    const [, key, rawValue] = match;
+    if (topLevelKeys.has(key)) throw new CliError(`duplicate Skill frontmatter key: ${key}`);
+    topLevelKeys.add(key);
+
+    let next = index + 1;
+    while (next < lines.length && (!lines[next].trim() || /^[ \t]/.test(lines[next]))) {
+      next += 1;
+    }
+    const continuation = lines.slice(index + 1, next);
+    if (key === "name" || key === "description") {
+      let value;
+      if (/^[|>]/.test(rawValue.trim())) {
+        value = parsePortableBlockScalar(rawValue.trim(), continuation, key);
+      } else {
+        if (continuation.some((entry) => entry.trim())) {
+          throw new CliError(`Skill frontmatter ${key} must be one top-level scalar`);
+        }
+        value = parseFrontmatterString(rawValue, key);
+      }
+      requiredValues.set(key, value);
+    }
+    index = next;
+  }
+
+  for (const key of ["name", "description"]) {
+    if (!requiredValues.has(key)) throw new CliError(`Skill frontmatter is missing ${key}`);
+  }
+  const name = requiredValues.get("name").trim();
+  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(name) || name.length > 64) {
+    throw new CliError(
+      "Skill frontmatter name must be 1-64 characters of lowercase hyphen-case",
+    );
+  }
+  const description = requiredValues.get("description").trim();
+  if (!description || description.length > 1024 || /[<>]/.test(description)) {
+    throw new CliError(
+      "Skill frontmatter description must be a non-empty string of at most 1024 characters without angle brackets",
+    );
+  }
+  return { start: 0, end };
+}
+
 function locateProtectedRanges(content) {
   const ranges = [];
   for (const [startMarker, endMarker] of PROTECTED_MARKERS) {
@@ -506,10 +704,20 @@ function validateSkill(content) {
   return { frontmatter, protectedRanges };
 }
 
+function validateSkillV3(content) {
+  const frontmatter = validateFrontmatterV3(content);
+  const protectedRanges = locateProtectedRanges(content);
+  if (protectedRanges.some((range) => overlaps(frontmatter.start, frontmatter.end, range))) {
+    throw new CliError("Skill frontmatter must not contain a protected marker region");
+  }
+  return { frontmatter, protectedRanges };
+}
+
 function overlaps(spanStart, spanEnd, range) {
   return spanStart < range.end && spanEnd > range.start;
 }
 
+// Retained separately so v2 report bytes and validation semantics remain reviewable.
 function validatePatch(value) {
   if (value.schema_version !== 2) throw new CliError("edits schema_version must be 2");
   exactKeys(
@@ -594,8 +802,241 @@ function validatePatch(value) {
   };
 }
 
-function planEdits(content, edits) {
-  const { frontmatter, protectedRanges } = validateSkill(content);
+function requireNonBlank(value, label) {
+  if (typeof value !== "string" || !value.trim()) {
+    throw new CliError(`${label} must be a non-empty string`);
+  }
+  return value;
+}
+
+function validatePatchV3(value) {
+  if (value.schema !== PATCH_SCHEMA_V3) {
+    throw new CliError(`edits schema must be ${PATCH_SCHEMA_V3}`);
+  }
+  exactKeys(
+    value,
+    [
+      "schema",
+      "proposal_id",
+      "source_sha256",
+      "max_edits",
+      "max_added_bytes",
+      "max_removed_bytes",
+      "assumptions",
+      "prior_rejections",
+      "edits",
+    ],
+    "v3 patch document",
+  );
+  validateStableId(value.proposal_id, "proposal_id");
+  validateDigest(value.source_sha256, "patch source_sha256");
+  if (!Number.isInteger(value.max_edits)
+      || value.max_edits < 1
+      || value.max_edits > HARD_MAX_EDITS) {
+    throw new CliError(`max_edits must be an integer between 1 and ${HARD_MAX_EDITS}`);
+  }
+  for (const field of ["max_added_bytes", "max_removed_bytes"]) {
+    if (!Number.isInteger(value[field])
+        || value[field] < 1
+        || value[field] > HARD_MAX_PATCH_BYTES) {
+      throw new CliError(
+        `${field} must be an integer between 1 and ${HARD_MAX_PATCH_BYTES}`,
+      );
+    }
+  }
+
+  if (!Array.isArray(value.assumptions)
+      || value.assumptions.length < 1
+      || value.assumptions.length > MAX_SAMPLE_ROWS) {
+    throw new CliError("assumptions must contain between 1 and 1000 entries");
+  }
+  const assumptionIds = new Set();
+  const assumptions = value.assumptions.map((assumption, index) => {
+    const label = `assumption ${index + 1}`;
+    if (!assumption || typeof assumption !== "object" || Array.isArray(assumption)) {
+      throw new CliError(`${label} must be an object`);
+    }
+    exactKeys(assumption, ["assumption_id", "status", "summary"], label);
+    validateStableId(assumption.assumption_id, `${label} assumption_id`);
+    if (assumptionIds.has(assumption.assumption_id)) {
+      throw new CliError(`duplicate assumption_id: ${assumption.assumption_id}`);
+    }
+    assumptionIds.add(assumption.assumption_id);
+    if (!new Set(["known", "inferred", "open"]).has(assumption.status)) {
+      throw new CliError(`${label} status must be known, inferred, or open`);
+    }
+    requireNonBlank(assumption.summary, `${label} summary`);
+    return {
+      assumption_id: assumption.assumption_id,
+      status: assumption.status,
+      summary: assumption.summary,
+    };
+  });
+
+  if (!Array.isArray(value.prior_rejections)
+      || value.prior_rejections.length > MAX_SAMPLE_ROWS) {
+    throw new CliError("prior_rejections must be an array of at most 1000 entries");
+  }
+  const rejectionIds = new Set();
+  const logicalReportPaths = new Set();
+  const priorRejections = value.prior_rejections.map((rejection, index) => {
+    const label = `prior rejection ${index + 1}`;
+    if (!rejection || typeof rejection !== "object" || Array.isArray(rejection)) {
+      throw new CliError(`${label} must be an object`);
+    }
+    exactKeys(rejection, ["rejection_id", "report", "relationship", "note"], label);
+    validateStableId(rejection.rejection_id, `${label} rejection_id`);
+    if (rejectionIds.has(rejection.rejection_id)) {
+      throw new CliError(`duplicate rejection_id: ${rejection.rejection_id}`);
+    }
+    rejectionIds.add(rejection.rejection_id);
+    if (!rejection.report || typeof rejection.report !== "object"
+        || Array.isArray(rejection.report)) {
+      throw new CliError(`${label} report must be an artifact object`);
+    }
+    exactKeys(rejection.report, ["path", "sha256"], `${label} report`);
+    if (typeof rejection.report.path !== "string" || !rejection.report.path) {
+      throw new CliError(`${label} report path must be a non-empty string`);
+    }
+    validateDigest(rejection.report.sha256, `${label} report sha256`);
+    if (logicalReportPaths.has(rejection.report.path)) {
+      throw new CliError(`duplicate prior rejection report path: ${rejection.report.path}`);
+    }
+    logicalReportPaths.add(rejection.report.path);
+    if (!new Set([
+      "supersedes",
+      "narrows",
+      "unchanged-risk",
+      "not-applicable",
+    ]).has(rejection.relationship)) {
+      throw new CliError(`${label} relationship is not recognized`);
+    }
+    requireNonBlank(rejection.note, `${label} note`);
+    return {
+      rejection_id: rejection.rejection_id,
+      report: { path: rejection.report.path, sha256: rejection.report.sha256 },
+      relationship: rejection.relationship,
+      note: rejection.note,
+    };
+  });
+
+  if (!Array.isArray(value.edits) || value.edits.length < 1) {
+    throw new CliError("edits must be a non-empty array");
+  }
+  if (value.edits.length > value.max_edits) {
+    throw new CliError(`edits length exceeds max_edits (${value.max_edits})`);
+  }
+  const editIds = new Set();
+  const edits = value.edits.map((edit, index) => {
+    const label = `edit ${index + 1}`;
+    if (!edit || typeof edit !== "object" || Array.isArray(edit)) {
+      throw new CliError(`${label} must be an object`);
+    }
+    exactKeys(
+      edit,
+      [
+        "edit_id",
+        "op",
+        "target",
+        "content",
+        "rationale",
+        "supporting_case_ids",
+        "support_count",
+        "source_types",
+      ],
+      label,
+    );
+    validateStableId(edit.edit_id, `${label} edit_id`);
+    if (editIds.has(edit.edit_id)) throw new CliError(`duplicate edit_id: ${edit.edit_id}`);
+    editIds.add(edit.edit_id);
+    if (!EDIT_OPS.has(edit.op)) throw new CliError(`${label} has unknown op`);
+    if (typeof edit.target !== "string" || typeof edit.content !== "string") {
+      throw new CliError(`${label} target and content must be strings`);
+    }
+    for (const field of ["target", "content"]) {
+      if (Buffer.byteLength(edit[field], "utf8") > HARD_MAX_EDIT_BYTES) {
+        throw new CliError(`${label} ${field} exceeds ${HARD_MAX_EDIT_BYTES} UTF-8 bytes`);
+      }
+    }
+    if (edit.op === "append") {
+      if (edit.target !== "") throw new CliError(`${label} append target must be empty`);
+      if (!edit.content) throw new CliError(`${label} append content must not be empty`);
+    } else {
+      if (!edit.target) throw new CliError(`${label} target must not be empty`);
+      if (edit.op === "delete" && edit.content !== "") {
+        throw new CliError(`${label} delete content must be empty`);
+      }
+      if (edit.op !== "delete" && !edit.content) {
+        throw new CliError(`${label} content must not be empty`);
+      }
+    }
+    requireNonBlank(edit.rationale, `${label} rationale`);
+    if (!Array.isArray(edit.supporting_case_ids)
+        || edit.supporting_case_ids.length < 1
+        || edit.supporting_case_ids.length > MAX_SAMPLE_ROWS) {
+      throw new CliError(`${label} supporting_case_ids must be a non-empty array`);
+    }
+    const supportingCaseIds = new Set();
+    for (const caseId of edit.supporting_case_ids) {
+      validateStableId(caseId, `${label} supporting_case_ids entry`);
+      if (supportingCaseIds.has(caseId)) {
+        throw new CliError(`${label} supporting_case_ids must be unique`);
+      }
+      supportingCaseIds.add(caseId);
+    }
+    if (!Number.isInteger(edit.support_count)
+        || edit.support_count !== supportingCaseIds.size) {
+      throw new CliError(
+        `${label} support_count must equal the number of distinct supporting_case_ids`,
+      );
+    }
+    if (!Array.isArray(edit.source_types)
+        || edit.source_types.length < 1
+        || edit.source_types.length > 4) {
+      throw new CliError(`${label} source_types must be a non-empty array`);
+    }
+    const sourceTypes = new Set();
+    for (const sourceType of edit.source_types) {
+      if (!new Set(["failure", "success", "rejection", "human-constraint"])
+        .has(sourceType)) {
+        throw new CliError(`${label} source_types contains an unknown value`);
+      }
+      if (sourceTypes.has(sourceType)) {
+        throw new CliError(`${label} source_types must be unique`);
+      }
+      sourceTypes.add(sourceType);
+    }
+    for (const marker of ALL_MARKERS) {
+      if (edit.content.includes(marker)) {
+        throw new CliError(`${label} content cannot introduce a protected marker`);
+      }
+    }
+    return {
+      edit_id: edit.edit_id,
+      op: edit.op,
+      target: edit.target,
+      content: edit.content,
+      rationale: edit.rationale,
+      supporting_case_ids: [...edit.supporting_case_ids],
+      support_count: edit.support_count,
+      source_types: [...edit.source_types],
+    };
+  });
+
+  return {
+    proposalId: value.proposal_id,
+    sourceSha: value.source_sha256,
+    maxEdits: value.max_edits,
+    maxAddedBytes: value.max_added_bytes,
+    maxRemovedBytes: value.max_removed_bytes,
+    assumptions,
+    priorRejections,
+    edits,
+  };
+}
+
+function planEdits(content, edits, skillValidator = validateSkill) {
+  const { frontmatter, protectedRanges } = skillValidator(content);
   const planned = edits.map((edit, offset) => {
     const index = offset + 1;
     if (edit.op === "append") {
@@ -649,7 +1090,7 @@ function planEdits(content, edits) {
   return planned;
 }
 
-function applyPlannedEdits(source, planned) {
+function applyPlannedEdits(source, planned, skillValidator = validateSkill) {
   let candidate = source;
   const reports = new Map();
   const applicationOrder = [...planned].sort((left, right) => {
@@ -687,7 +1128,7 @@ function applyPlannedEdits(source, planned) {
     });
   }
 
-  validateSkill(candidate);
+  skillValidator(candidate);
   return {
     candidate,
     appliedEdits: [...reports.values()].sort((left, right) => left.index - right.index),
@@ -737,7 +1178,84 @@ function buildApplyResult(sourceBuffer, editsBuffer) {
   return { candidate: result.candidate, report };
 }
 
+function buildApplyResultV3(sourceBuffer, editsBuffer, patchValue, artifactStore) {
+  const source = decodeUtf8(sourceBuffer, "source Skill");
+  const sourceValidation = validateSkillV3(source);
+  const patch = validatePatchV3(patchValue);
+  const sourceSha = sha256(sourceBuffer);
+  if (patch.sourceSha !== sourceSha) {
+    throw classifiedError(
+      "unsafe_path_or_integrity",
+      "patch source_sha256 does not match the source Skill",
+    );
+  }
+  for (const rejection of patch.priorRejections) {
+    artifactStore.readRelative(
+      rejection.report.path,
+      rejection.report.sha256,
+      `prior rejection ${rejection.rejection_id} report`,
+    );
+  }
+
+  const planned = planEdits(source, patch.edits, validateSkillV3);
+  const result = applyPlannedEdits(source, planned, validateSkillV3);
+  if (result.candidate === source) throw new CliError("patch produced no candidate change");
+  const candidateValidation = validateSkillV3(result.candidate);
+  if (source.slice(sourceValidation.frontmatter.start, sourceValidation.frontmatter.end)
+      !== result.candidate.slice(
+        candidateValidation.frontmatter.start,
+        candidateValidation.frontmatter.end,
+      )) {
+    throw new CliError("patch changed immutable source frontmatter bytes");
+  }
+
+  const addedBytes = result.appliedEdits.reduce((total, edit) => total + edit.added_bytes, 0);
+  const removedBytes = result.appliedEdits.reduce(
+    (total, edit) => total + edit.removed_bytes,
+    0,
+  );
+  if (addedBytes > patch.maxAddedBytes) {
+    throw new CliError(
+      `actual added bytes ${addedBytes} exceed max_added_bytes ${patch.maxAddedBytes}`,
+    );
+  }
+  if (removedBytes > patch.maxRemovedBytes) {
+    throw new CliError(
+      `actual removed bytes ${removedBytes} exceed max_removed_bytes ${patch.maxRemovedBytes}`,
+    );
+  }
+
+  const report = {
+    schema: APPLY_REPORT_SCHEMA_V3,
+    status: "applied",
+    proposal_id: patch.proposalId,
+    source_sha256: sourceSha,
+    candidate_sha256: sha256(result.candidate),
+    patch_sha256: sha256(editsBuffer),
+    max_edits: patch.maxEdits,
+    max_added_bytes: patch.maxAddedBytes,
+    max_removed_bytes: patch.maxRemovedBytes,
+    actual_added_bytes: addedBytes,
+    actual_removed_bytes: removedBytes,
+    assumptions: patch.assumptions,
+    prior_rejections: patch.priorRejections,
+    applied_edits: result.appliedEdits.map((applied) => {
+      const edit = patch.edits[applied.index - 1];
+      return {
+        edit_id: edit.edit_id,
+        ...applied,
+        rationale: edit.rationale,
+        supporting_case_ids: edit.supporting_case_ids,
+        support_count: edit.support_count,
+        source_types: edit.source_types,
+      };
+    }),
+  };
+  return { candidate: result.candidate, report };
+}
+
 function applyCommand(options) {
+  validateRuntime();
   const paths = requireOptions(options, [
     "workspace-root",
     "source",
@@ -746,14 +1264,78 @@ function applyCommand(options) {
     "report",
   ]);
   const workspace = prepareWorkspace(paths["workspace-root"]);
-  for (const input of [paths.source, paths.edits]) {
-    assertExistingWithin(workspace.rootReal, input, "apply input");
+  assertExistingWithin(workspace.rootReal, paths.edits, "apply edits input");
+  const editsWasSymbolicLink = lstatSync(paths.edits).isSymbolicLink();
+  const initialEditsBuffer = readLimitedInput(
+    paths.edits,
+    "edits document",
+    { allowSymbolicLinkPeek: true },
+  );
+  const initialPatchValue = parseJson(initialEditsBuffer, "edits document");
+
+  if (initialPatchValue.schema === PATCH_SCHEMA_V3) {
+    validatePatchV3(initialPatchValue);
+    try {
+      assertOutputWithin(workspace, paths.candidate, "candidate output");
+    } catch (error) {
+      const status = /already exists/.test(error.message)
+        ? "publication_failure"
+        : "unsafe_path_or_integrity";
+      throw reclassify(error, status);
+    }
+    try {
+      assertOutputWithin(workspace, paths.report, "apply report");
+    } catch (error) {
+      const status = /already exists/.test(error.message)
+        ? "publication_failure"
+        : "unsafe_path_or_integrity";
+      throw reclassify(error, status);
+    }
+
+    const store = new ArtifactStore(workspace);
+    const patchArtifact = store.readAbsolute(
+      paths.edits,
+      sha256(initialEditsBuffer),
+      "edits document",
+    );
+    const patchValue = parseJson(patchArtifact.bytes, "edits document");
+    if (patchValue.schema !== PATCH_SCHEMA_V3) {
+      throw classifiedError(
+        "unsafe_path_or_integrity",
+        "edits document changed while apply preflight was running",
+      );
+    }
+    const sourceArtifact = store.readAbsolute(
+      paths.source,
+      patchValue.source_sha256,
+      "source Skill (patch source_sha256)",
+      { skill: true },
+    );
+    const result = buildApplyResultV3(
+      sourceArtifact.bytes,
+      patchArtifact.bytes,
+      patchValue,
+      store,
+    );
+    writeTwoOutputs(
+      paths.candidate,
+      result.candidate,
+      paths.report,
+      canonicalJsonLine(result.report),
+      [paths.source, paths.edits],
+      "publication_failure",
+    );
+    return;
   }
+
+  if (editsWasSymbolicLink) {
+    throw new CliError(`edits document must be a physical regular file: ${paths.edits}`);
+  }
+  assertExistingWithin(workspace.rootReal, paths.source, "apply input");
   assertOutputWithin(workspace, paths.candidate, "candidate output");
   assertOutputWithin(workspace, paths.report, "apply report");
   const sourceBuffer = readRegularFile(paths.source, "source Skill");
-  const editsBuffer = readRegularFile(paths.edits, "edits document");
-  const result = buildApplyResult(sourceBuffer, editsBuffer);
+  const result = buildApplyResult(sourceBuffer, initialEditsBuffer);
   writeTwoOutputs(
     paths.candidate,
     result.candidate,
@@ -1084,6 +1666,7 @@ function evaluateCampaign(campaign) {
 }
 
 function gateCommand(options) {
+  validateRuntime();
   const paths = requireOptions(options, ["workspace-root", "results", "report"]);
   const workspace = prepareWorkspace(paths["workspace-root"]);
   assertExistingWithin(workspace.rootReal, paths.results, "gate input");
@@ -1167,6 +1750,148 @@ function readWorkspaceArtifact(workspace, path, expectedSha, label) {
   };
 }
 
+// V3 reads use one bounded store; Task 2 reuses it for campaign and bundle inputs.
+class ArtifactStore {
+  constructor(workspace) {
+    this.workspace = workspace;
+    this.byRealPath = new Map();
+    this.countedPhysicalArtifacts = new Set();
+    this.campaignBytes = 0;
+  }
+
+  readAbsolute(path, expectedSha, label, { skill = false } = {}) {
+    const absolute = resolve(path);
+    if (!isWithin(this.workspace.rootAbsolute, absolute)) {
+      throw classifiedError(
+        "unsafe_path_or_integrity",
+        `${label} is outside the workspace root`,
+      );
+    }
+    const relativePath = relative(this.workspace.rootAbsolute, absolute)
+      .split(sep)
+      .join("/");
+    return this.readRelative(relativePath, expectedSha, label, { skill });
+  }
+
+  readRelative(path, expectedSha, label, { skill = false } = {}) {
+    let parts;
+    try {
+      parts = workspaceRelativeParts(path, label);
+    } catch (error) {
+      throw reclassify(error, "unsafe_path_or_integrity");
+    }
+    let current = this.workspace.rootAbsolute;
+    let stat;
+    for (let index = 0; index < parts.length; index += 1) {
+      current = resolve(current, parts[index]);
+      try {
+        stat = lstatSync(current);
+      } catch {
+        throw classifiedError(
+          "unsafe_path_or_integrity",
+          `${label} does not exist: ${path}`,
+        );
+      }
+      if (stat.isSymbolicLink()) {
+        throw classifiedError(
+          "unsafe_path_or_integrity",
+          `${label} must not contain a symbolic link: ${path}`,
+        );
+      }
+      if (index < parts.length - 1 && !stat.isDirectory()) {
+        throw classifiedError(
+          "unsafe_path_or_integrity",
+          `${label} parent must be a physical directory: ${path}`,
+        );
+      }
+      if (index === parts.length - 1 && !stat.isFile()) {
+        throw classifiedError(
+          "unsafe_path_or_integrity",
+          `${label} must be a physical regular file: ${path}`,
+        );
+      }
+    }
+
+    const real = realpathSync(current);
+    if (!isWithin(this.workspace.rootReal, real)) {
+      throw classifiedError(
+        "unsafe_path_or_integrity",
+        `${label} resolves outside the workspace root`,
+      );
+    }
+    if (!Number.isSafeInteger(stat.size) || stat.size > MAX_INPUT_BYTES) {
+      throw classifiedError(
+        "usage_or_schema",
+        `${label} exceeds the ${MAX_INPUT_BYTES}-byte (8 MiB) input limit`,
+      );
+    }
+
+    const cached = this.byRealPath.get(real);
+    if (cached) {
+      if (expectedSha && cached.sha256 !== expectedSha) {
+        throw classifiedError(
+          "unsafe_path_or_integrity",
+          `${label} sha256 mismatch: expected ${expectedSha}, got ${cached.sha256}`,
+        );
+      }
+      this.count(cached, skill, label);
+      return cached;
+    }
+
+    let bytes;
+    try {
+      bytes = readFileSync(current);
+    } catch (error) {
+      throw classifiedError(
+        "unsafe_path_or_integrity",
+        `${label} could not be read: ${error.message}`,
+      );
+    }
+    if (bytes.length > MAX_INPUT_BYTES) {
+      throw classifiedError(
+        "usage_or_schema",
+        `${label} exceeds the ${MAX_INPUT_BYTES}-byte (8 MiB) input limit`,
+      );
+    }
+    const digest = sha256(bytes);
+    if (expectedSha && digest !== expectedSha) {
+      throw classifiedError(
+        "unsafe_path_or_integrity",
+        `${label} sha256 mismatch: expected ${expectedSha}, got ${digest}`,
+      );
+    }
+    const physicalKey = Number.isSafeInteger(stat.dev)
+        && Number.isSafeInteger(stat.ino)
+        && stat.ino !== 0
+      ? `${stat.dev}:${stat.ino}:${digest}`
+      : `${real}:${digest}`;
+    const artifact = {
+      path,
+      absolute: current,
+      real,
+      bytes,
+      sha256: digest,
+      physicalKey,
+    };
+    this.byRealPath.set(real, artifact);
+    this.count(artifact, skill, label);
+    return artifact;
+  }
+
+  count(artifact, skill, label) {
+    if (skill || this.countedPhysicalArtifacts.has(artifact.physicalKey)) return;
+    const next = this.campaignBytes + artifact.bytes.length;
+    if (next > MAX_CAMPAIGN_BYTES) {
+      throw classifiedError(
+        "usage_or_schema",
+        `${label} exceeds the ${MAX_CAMPAIGN_BYTES}-byte (64 MiB) aggregate campaign limit`,
+      );
+    }
+    this.countedPhysicalArtifacts.add(artifact.physicalKey);
+    this.campaignBytes = next;
+  }
+}
+
 function canonicalJson(value) {
   if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
   if (value && typeof value === "object") {
@@ -1176,6 +1901,10 @@ function canonicalJson(value) {
       .join(",")}}`;
   }
   return JSON.stringify(value);
+}
+
+function canonicalJsonLine(value) {
+  return `${canonicalJson(value)}\n`;
 }
 
 function physicalDirectory(path, label) {
@@ -1222,6 +1951,131 @@ function assertExistingWithin(rootReal, path, label) {
   if (!isWithin(rootReal, real)) throw new CliError(`${label} is outside the workspace root`);
 }
 
+function doctorCommand(options) {
+  const runtime = validateRuntime();
+  const paths = requireOptions(options, ["workspace-root", "output-parent"]);
+  let workspace;
+  try {
+    workspace = prepareWorkspace(paths["workspace-root"]);
+  } catch (error) {
+    throw reclassify(error, "unsafe_path_or_integrity");
+  }
+
+  const outputAbsolute = resolve(paths["output-parent"]);
+  if (!isWithin(workspace.rootAbsolute, outputAbsolute)) {
+    throw classifiedError(
+      "unsafe_path_or_integrity",
+      "doctor output parent is outside the workspace root",
+    );
+  }
+  let outputReal;
+  try {
+    outputReal = physicalDirectory(outputAbsolute, "doctor output parent");
+  } catch (error) {
+    throw reclassify(error, "unsafe_path_or_integrity");
+  }
+  if (!isWithin(workspace.rootReal, outputReal)) {
+    throw classifiedError(
+      "unsafe_path_or_integrity",
+      "doctor output parent resolves outside the workspace root",
+    );
+  }
+
+  let workspaceStat;
+  let outputStat;
+  try {
+    workspaceStat = lstatSync(workspace.rootReal);
+    outputStat = lstatSync(outputAbsolute);
+  } catch (error) {
+    throw classifiedError(
+      "unsupported_preflight",
+      `could not inspect doctor filesystem: ${error.message}`,
+    );
+  }
+  if (workspaceStat.dev !== outputStat.dev) {
+    throw classifiedError(
+      "unsupported_preflight",
+      "workspace and output parent are not on the same device",
+    );
+  }
+  if ((outputStat.mode & 0o077) !== 0) {
+    throw classifiedError(
+      "unsupported_preflight",
+      "doctor output parent must be private (no group or other permissions)",
+    );
+  }
+
+  let probeDirectory;
+  let probeFailure = null;
+  let cleanupFailure = null;
+  try {
+    probeDirectory = mkdtempSync(resolve(outputReal, ".skill-lab-doctor-"));
+    const probeDirectoryStat = lstatSync(probeDirectory);
+    if (!probeDirectoryStat.isDirectory() || (probeDirectoryStat.mode & 0o077) !== 0) {
+      throw new Error("private probe directory permissions are unsupported");
+    }
+    const source = resolve(probeDirectory, "source");
+    const linked = resolve(probeDirectory, "linked");
+    writeFileSync(source, "skill-lab-doctor\n", { mode: 0o600, flag: "wx" });
+    const sourceStat = lstatSync(source);
+    if (!sourceStat.isFile()
+        || sourceStat.isSymbolicLink()
+        || (sourceStat.mode & 0o077) !== 0
+        || sourceStat.dev !== workspaceStat.dev) {
+      throw new Error("private same-device probe file semantics are unsupported");
+    }
+    linkSync(source, linked);
+    if (!samePhysicalFile(source, linked)) {
+      throw new Error("hard-link identity could not be verified");
+    }
+  } catch (error) {
+    probeFailure = error;
+  } finally {
+    if (probeDirectory) {
+      try {
+        rmSync(probeDirectory, { recursive: true });
+        if (existsSync(probeDirectory)) throw new Error("probe directory still exists");
+      } catch (error) {
+        cleanupFailure = error;
+      }
+    }
+  }
+  if (probeFailure || cleanupFailure) {
+    const reasons = [probeFailure, cleanupFailure]
+      .filter(Boolean)
+      .map((error) => error.message)
+      .join("; ");
+    throw classifiedError(
+      "unsupported_preflight",
+      `doctor filesystem probe failed: ${reasons}`,
+    );
+  }
+
+  const report = {
+    schema: DOCTOR_REPORT_SCHEMA_V3,
+    status: "ready",
+    runtime,
+    exit_codes: EXIT_CODES,
+    limits: {
+      max_input_bytes: MAX_INPUT_BYTES,
+      max_campaign_bytes: MAX_CAMPAIGN_BYTES,
+      max_bundle_bytes: MAX_BUNDLE_BYTES,
+      max_sample_rows: MAX_SAMPLE_ROWS,
+      required_valid_min: MIN_REQUIRED_VALID,
+      required_valid_max: MAX_REQUIRED_VALID,
+    },
+    checks: {
+      workspace_physical: true,
+      output_parent_contained: true,
+      output_parent_private: true,
+      same_device: true,
+      hard_link: true,
+      probe_cleaned: true,
+    },
+  };
+  process.stdout.write(canonicalJsonLine(report));
+}
+
 function prepareStageDestination(rootInput, outputInput) {
   const workspace = prepareWorkspace(rootInput);
   const outputAbsolute = resolve(outputInput);
@@ -1244,6 +2098,7 @@ function prepareStageDestination(rootInput, outputInput) {
 }
 
 function stageCommand(options) {
+  validateRuntime();
   const paths = requireOptions(options, [
     "workspace-root",
     "source",
@@ -1437,9 +2292,10 @@ function stageCommand(options) {
 
 function main() {
   const [command, ...tokens] = process.argv.slice(2);
-  if (!command) throw new CliError("missing command; expected apply, gate, or stage");
+  if (!command) throw new CliError("missing command; expected apply, doctor, gate, or stage");
   const options = parseOptions(tokens);
   if (command === "apply") applyCommand(options);
+  else if (command === "doctor") doctorCommand(options);
   else if (command === "gate") gateCommand(options);
   else if (command === "stage") stageCommand(options);
   else throw new CliError(`unknown command: ${command}`);
@@ -1449,6 +2305,7 @@ try {
   main();
 } catch (error) {
   const message = error instanceof Error ? error.message : String(error);
-  process.stderr.write(`skill-lab: ${message}\n`);
+  const status = error instanceof CliError && error.status ? `${error.status}: ` : "";
+  process.stderr.write(`skill-lab: ${status}${message}\n`);
   process.exitCode = error instanceof CliError ? error.exitCode : 2;
 }

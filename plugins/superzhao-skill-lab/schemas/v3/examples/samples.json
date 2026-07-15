@@ -1,0 +1,40 @@
+{
+  "schema": "superzhao.skill-lab.samples/v3",
+  "campaign_id": "campaign-v3-example",
+  "source": {
+    "path": "skills/example/SKILL.md",
+    "sha256": "1111111111111111111111111111111111111111111111111111111111111111"
+  },
+  "candidate": {
+    "path": "candidate/example/SKILL.md",
+    "sha256": "2222222222222222222222222222222222222222222222222222222222222222"
+  },
+  "cases": {
+    "path": "campaign/cases.json",
+    "sha256": "3333333333333333333333333333333333333333333333333333333333333333"
+  },
+  "samples": [
+    {
+      "sample_id": "sample-selection-important-current-1",
+      "run_id": "run-selection-important-current-1",
+      "actor_instance_id": "actor-instance-selection-important-current-1",
+      "actor_profile_id": "actor-profile-codex-gpt5-v1",
+      "case_id": "selection-important-1",
+      "split": "selection",
+      "case_type": "important",
+      "arm": "current",
+      "skill_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+      "actor_run": {
+        "path": "campaign/runs/run-selection-important-current-1.json",
+        "sha256": "5555555555555555555555555555555555555555555555555555555555555555"
+      },
+      "scorer_run_id": "scorer-run-selection-important-current-1",
+      "scorer_record": {
+        "path": "campaign/scores/scorer-run-selection-important-current-1.json",
+        "sha256": "6666666666666666666666666666666666666666666666666666666666666666"
+      },
+      "status": "valid",
+      "outcome": "pass"
+    }
+  ]
+}

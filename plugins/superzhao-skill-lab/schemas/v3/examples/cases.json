@@ -1,0 +1,59 @@
+{
+  "schema": "superzhao.skill-lab.cases/v3",
+  "campaign_id": "campaign-v3-example",
+  "required_valid": 5,
+  "cases": [
+    {
+      "case_id": "selection-important-1",
+      "split": "selection",
+      "case_type": "important",
+      "prompt": {
+        "path": "campaign/prompts/selection-important-1.md",
+        "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "rubric": {
+        "path": "campaign/rubrics/behavior-rubric.md",
+        "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+      }
+    },
+    {
+      "case_id": "selection-control-1",
+      "split": "selection",
+      "case_type": "control",
+      "prompt": {
+        "path": "campaign/prompts/selection-control-1.md",
+        "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      },
+      "rubric": {
+        "path": "campaign/rubrics/behavior-rubric.md",
+        "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+      }
+    },
+    {
+      "case_id": "test-important-1",
+      "split": "test",
+      "case_type": "important",
+      "prompt": {
+        "path": "campaign/prompts/test-important-1.md",
+        "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+      },
+      "rubric": {
+        "path": "campaign/rubrics/behavior-rubric.md",
+        "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+      }
+    },
+    {
+      "case_id": "test-control-1",
+      "split": "test",
+      "case_type": "control",
+      "prompt": {
+        "path": "campaign/prompts/test-control-1.md",
+        "sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+      },
+      "rubric": {
+        "path": "campaign/rubrics/behavior-rubric.md",
+        "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+      }
+    }
+  ]
+}

@@ -5,15 +5,20 @@ Date: 2026-07-15
 Original integrated-campaign Skill-profile SHA-256:
 `69f8ad95b00016854ab61a70b438b40d99f209ce1358aed3af4a0295adc62e10`
 
-Review-corrected Skill-profile SHA-256:
+Intermediate review Skill-profile SHA-256:
 `badb51b9aabe20db044ad7a9c77f4b4cb560dc32d94c6452a3fdbce90e288e5f`
 
-Profile root: repository `skills/` directory, 14 managed Skills. Both digests
+Current candidate Skill-profile SHA-256:
+`08c8aebdfc41a67fdca7b023c614ef42a91173c9d7f03455691629f02fa7fa55`
+
+Profile root: repository `skills/` directory, 14 managed Skills. All digests
 were generated with `node scripts/profile-integrity.mjs manifest --root skills`.
 The original five-by-28 campaign binds the first digest. Independent review then
 changed only `finishing-a-development-branch` and
 `subagent-driven-development` (including its implementer prompt); the targeted
-five-by-eight delta campaign binds the second digest.
+five-by-eight delta campaign binds the second digest. A final review correction
+to SDD's generic issue loop produced the third digest and invalidated the earlier
+SDD behavior evidence for current-candidate acceptance.
 
 This artifact is the content-bound audit record for both campaigns. The scenario
 contract and rubric below were fixed before scoring. Actors read the bound Skill
@@ -298,17 +303,29 @@ The ledger scores every retained raw final answer against the predeclared tables
 | Review delta | D3 | `badb51b9…e5f` | 8 | 8 | 0 | valid follow-up |
 | Review delta | D4 | `badb51b9…e5f` | 8 | 8 | 0 | valid follow-up |
 | Review delta | D5 | `badb51b9…e5f` | 8 | 8 | 0 | valid follow-up |
-| Baseline | B1 | `b3e50ef4…c74` | 28 | 22 | 6 | valid; rejected `EP-I`, `DP-I`, `RC-I`, `V-I`, `F-I`, `WS-C` |
+| Baseline | B1 | `b3e50ef4…c74` | 28 | 21 | 7 | valid; rejected `EP-I`, `DP-I`, `DBG-I`, `RC-I`, `V-I`, `F-I`, `WS-C` |
 | Baseline | B2 | `b3e50ef4…c74` | 0 | 0 | 0 | `INDETERMINATE`; excluded |
 | Baseline | B3 | `b3e50ef4…c74` | 0 | 0 | 0 | `INDETERMINATE`; excluded |
+| Current candidate | E1–E5 | `08c8aebd…a55` | 0 | 0 | 0 | pending five fresh 12-decision samples; no acceptance claim |
 
 The original full campaign is 140/140 accepted decisions on its exact profile.
 The review-correction delta is 40/40 on the corrected Finishing/SDD content.
 These denominators are reported separately: the delta is not misrepresented as
-another full 28-scenario fresh-context campaign. The current-profile acceptance
-uses the original evidence for the 12 unchanged Skills and the targeted delta,
-static RED/GREEN contract, and final integration verification for the two changed
-Skills.
+another full 28-scenario fresh-context campaign. They are historical evidence for
+their exact content bindings, not proof of the current candidate.
+
+## Required Current-Profile Rerun Contract
+
+Samples `E1` through `E5` must each use a fresh independent context, read current
+profile `08c8aebd…a55`, receive no expected labels, and answer these 12 already
+predeclared scenarios: `F-I`, `F-C`, `SD-I`, `SD-C`, `FIN-I`, `FIN-C`, `SDD-P`,
+`SDD-W`, `SDD-T`, `SDD-R`, `SDD-M`, and `SDD-B`. The scenario facts and accepted
+or rejected decisions are exactly those in the two rubric sections above. Each
+sample is valid only if all 12 IDs appear once; invalid or indeterminate runs are
+retained and excluded, then replaced only by a separately identified fresh run.
+
+No current-profile acceptance may be recorded until five valid fresh samples
+pass all 60 decisions and their raw outputs are appended below.
 
 The earlier guided probes and read-only baseline auditors are useful development
 notes but have no retained raw transcript here, so they are deliberately excluded

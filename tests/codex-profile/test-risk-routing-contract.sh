@@ -251,6 +251,8 @@ require_text skills/subagent-driven-development/SKILL.md 'separate worktrees.*br
 reject_text skills/subagent-driven-development/SKILL.md 'Dispatch multiple implementation subagents in parallel \(conflicts\)' 'SDD has no universal parallel-writer prohibition'
 require_text skills/subagent-driven-development/SKILL.md 'Critical.*Important.*required spec-compliance' 'SDD blocks only material review findings and required spec gaps'
 reject_text skills/subagent-driven-development/SKILL.md 'Proceed with unfixed issues|reviewer found issues = implementer fixes' 'Minor review advice does not force a blocking fix loop'
+require_text skills/subagent-driven-development/SKILL.md 'If reviewer finds blocking Critical.*Important.*required spec-compliance issues' 'SDD follow-up loop is limited to blocking findings'
+reject_text skills/subagent-driven-development/SKILL.md '^\*\*If reviewer finds issues:' 'SDD has no generic all-severity review fix loop'
 require_text skills/subagent-driven-development/implementer-prompt.md 'targeted.*affected checks.*task' 'SDD implementers run task-proportional checks'
 require_text skills/subagent-driven-development/implementer-prompt.md 'complete relevant suite.*cross-cutting.*explicit plan.*final R3' 'SDD reserves complete-suite runs for material or final gates'
 reject_text skills/subagent-driven-development/implementer-prompt.md 'full suite once before committing' 'SDD does not run the full suite before every task commit'
@@ -272,7 +274,7 @@ require_text docs/superpowers/evals/2026-07-15-superzhao-14-skills-behavior-evid
 require_text docs/superpowers/evals/2026-07-15-superzhao-14-skills-behavior-evidence.md '^## Review-Correction Delta Contract' 'behavior evidence binds the post-review delta contract'
 require_text docs/superpowers/evals/2026-07-15-superzhao-14-skills-behavior-evidence.md '^\| Original candidate \| C5 .*\| 28 \| 28 \| 0 \| valid \|' 'candidate ledger retains all five full samples'
 require_text docs/superpowers/evals/2026-07-15-superzhao-14-skills-behavior-evidence.md '^\| Review delta \| D5 .*\| 8 \| 8 \| 0 \| valid follow-up \|' 'delta ledger retains all five correction samples'
-require_text docs/superpowers/evals/2026-07-15-superzhao-14-skills-behavior-evidence.md '^\| Baseline \| B1 .*\| 28 \| 22 \| 6 \|' 'baseline ledger records rejected decisions'
+require_text docs/superpowers/evals/2026-07-15-superzhao-14-skills-behavior-evidence.md '^\| Baseline \| B1 .*\| 28 \| 21 \| 7 .*DBG-I' 'baseline ledger records all seven rejected decisions'
 require_text docs/superpowers/evals/2026-07-15-superzhao-14-skills-behavior-evidence.md 'B2.*INDETERMINATE|B3.*INDETERMINATE' 'baseline indeterminates remain visible and excluded'
 
 require_text docs/superpowers/plans/2026-07-13-superzhao-codex-profile.md 'test-worktree-native-preference.*optional external harness.*not.*acceptance gate' 'plan marks upstream Claude behavior checks optional'

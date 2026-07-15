@@ -7,30 +7,31 @@ Baseline content: `b3e50ef460bac47bcd79d9befd68300c04067c74`
 Original integrated-campaign profile:
 `69f8ad95b00016854ab61a70b438b40d99f209ce1358aed3af4a0295adc62e10`
 
-Review-corrected profile:
+Intermediate review profile:
 `badb51b9aabe20db044ad7a9c77f4b4cb560dc32d94c6452a3fdbce90e288e5f`
+
+Current candidate profile:
+`08c8aebdfc41a67fdca7b023c614ef42a91173c9d7f03455691629f02fa7fa55`
 
 Auditable scenarios, rubric, per-sample ledger, and raw outputs:
 [behavior evidence](2026-07-15-superzhao-14-skills-behavior-evidence.md)
 
 ## Decision
 
-Accept the review-corrected behavior for all 14 managed Skills. Five
-fresh-context, uncoached actors each handled the original 28 important/control
-scenario semantics correctly: 140 accepted decisions out of 140 valid decisions.
-Independent review then changed only Finishing and SDD. The same five independent
-actor threads reread those corrected files and passed all eight targeted delta
-decisions: 40/40. The delta is reported separately because its follow-up turns
-were not fresh contexts.
+Current behavioral acceptance is pending. Five fresh-context actors scored
+140/140 on the original profile, and five follow-up turns scored 40/40 on the
+intermediate Finishing/SDD delta. Independent review then found another material
+SDD wording conflict. Under `writing-skills`, neither earlier campaign proves the
+new candidate merely because its decisions look compatible.
 
-The 12 unchanged Skills remain bound to the original full campaign. The two
-corrected Skills are bound to their original scenarios plus the targeted delta,
-static RED/GREEN contract, and repository integration verification. Raw final
-answers, actor thread IDs, rubric, and per-sample verdicts are retained in the
-linked evidence artifact.
+Acceptance therefore requires five fresh, independent, valid samples on the
+exact current profile. Each must answer the original Finishing/SDD important and
+control cases plus all eight correction cases (12 decisions per sample). Until
+those raw outputs and verdicts are recorded, this report does not claim the
+current Finishing/SDD behavior—or the integrated 14-Skill profile—is accepted.
 
 The candidate is also smaller overall: the 14 entrypoints changed from 22,051 to
-17,218 words, a reduction of 4,833 words (21.9%). Individual Skills were allowed
+17,250 words, a reduction of 4,801 words (21.8%). Individual Skills were allowed
 to grow when an exact evidence or safety binding was the demonstrated gap; size
 was not used as a substitute for behavior.
 
@@ -64,9 +65,10 @@ Development-time read-only audits informed scenario selection, but their raw
 transcripts were not retained and therefore are not quantitative acceptance
 evidence. The auditable baseline is one actor reading only `b3e50ef` and answering
 the same 28 integrated scenario semantics without expected decisions. It accepted
-22 and failed six: safe equivalent execution (`EP-I`), dynamic capacity (`DP-I`),
-independent clear feedback (`RC-I`), unchanged evidence reuse (`V-I`), exact
-remote SHA equality (`F-I`), and whole-set installation (`WS-C`).
+21 and failed seven: safe equivalent execution (`EP-I`), dynamic capacity
+(`DP-I`), proportionate obvious-cause debugging (`DBG-I`), independent clear
+feedback (`RC-I`), unchanged evidence reuse (`V-I`), exact remote SHA equality
+(`F-I`), and whole-set installation (`WS-C`).
 
 Two additional integrated baseline actors did not return a result within the
 working window. They are recorded as `INDETERMINATE`, were excluded from scoring,
@@ -179,6 +181,7 @@ independently exposed to the controller.
 - The CLI incompatibility and both incomplete baseline actors remain visible as
   invalid/indeterminate evidence rather than being converted into passing runs.
 
-Within those limits, the candidate consistently removed unnecessary ceremony
-while preserving approval, isolation, evidence, publication, and destructive
-action boundaries.
+Within those limits, the earlier bound candidates consistently removed
+unnecessary ceremony while preserving approval, isolation, evidence,
+publication, and destructive-action boundaries. The current profile remains
+unaccepted until the fresh rerun contract above is satisfied.

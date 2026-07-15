@@ -291,11 +291,11 @@ a ledger file, not only in todos.
 - Provide additional context if needed
 - Don't rush them into implementation
 
-**If reviewer finds issues:**
-- Implementer (same subagent) fixes them
-- Reviewer reviews again
-- Repeat until approved
-- Don't skip the re-review
+**If reviewer finds blocking Critical, Important, or required spec-compliance issues:**
+- Implementer (same subagent) fixes them or supplies a concrete evidence rebuttal
+- Reviewer reviews the exact changed content again
+- Repeat until every blocking finding is resolved
+- Keep optional Minor advice in the ledger for final triage unless separately approved as current scope
 
 **If subagent fails task:**
 - Dispatch fix subagent with specific instructions

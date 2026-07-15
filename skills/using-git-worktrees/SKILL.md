@@ -5,234 +5,122 @@ description: Use before R3 implementation, parallel writers, long-lived isolated
 
 # Using Git Worktrees
 
-## Overview
+Use isolation when it protects a concrete risk: high-impact implementation,
+concurrent writers, a separate lifecycle, or overlap with existing user changes.
+Detect the current workspace first and prefer the host's native isolation.
 
-Use an isolated workspace when risk, concurrency, duration, or dirty overlap requires it. Prefer your platform's native worktree tools. Fall back to manual git worktrees only when no native tool is available.
+**Core principle:** Isolate ownership, not routine work.
 
-**Core principle:** Detect existing isolation first. Gate new isolation by risk and overlap. Then use native tools before falling back to git. Never fight the harness.
+Announce this Skill when it causes a workspace switch, creates a branch/worktree,
+or stops work at an isolation gate. Merely detecting that the current checkout is
+already safe needs no ceremony.
 
-**Announce at start:** "I'm using the using-git-worktrees skill to set up an isolated workspace."
+## 1. Detect the Current Workspace
 
-## Step 0: Detect Existing Isolation
-
-**Before creating anything, check if you are already in an isolated workspace.**
+Before creating anything, inspect the repository, branch, current isolation, and
+dirty paths:
 
 ```bash
 GIT_DIR=$(cd "$(git rev-parse --git-dir)" 2>/dev/null && pwd -P)
 GIT_COMMON=$(cd "$(git rev-parse --git-common-dir)" 2>/dev/null && pwd -P)
 BRANCH=$(git branch --show-current)
+BASE_SHA=$(git rev-parse HEAD)
+git status --short
+git worktree list --porcelain
 ```
 
-**Submodule guard:** `GIT_DIR != GIT_COMMON` is also true inside git submodules. Before concluding "already in a worktree," verify you are not in a submodule:
+`GIT_DIR != GIT_COMMON` normally indicates a linked worktree, but it also occurs
+inside submodules. Check the guard before classifying the workspace:
 
 ```bash
-# If this returns a path, you're in a submodule, not a worktree — treat as normal repo
 git rev-parse --show-superproject-working-tree 2>/dev/null
 ```
 
-**If `GIT_DIR != GIT_COMMON` (and not a submodule):** You are already in a linked worktree. Skip to Step 2 (Project Setup). Do NOT create another worktree.
+If this is already a linked worktree, do not nest another one. Preserve its
+branch or detached state and continue to the setup check. A normal checkout or a
+submodule still needs the isolation decision below.
 
-Report with branch state:
-- On a branch: "Already in isolated workspace at `<path>` on branch `<name>`."
-- Detached HEAD: "Already in isolated workspace at `<path>` (detached HEAD, externally managed). Branch creation needed at finish time."
+Create an Isolation record in the task context: full base SHA, branch or detached state, workspace path, mechanism, owned path scope, pre-existing dirty paths, and cleanup owner.
 
-**If `GIT_DIR == GIT_COMMON` (or in a submodule):** You are in a normal repo checkout. Before asking for consent or creating anything, apply the isolation gate.
+This is a concise ownership handoff, not a new repository file or control system.
+Update it if the base, branch, workspace, or owned scope changes.
 
-Create or offer a worktree only when at least one of these conditions applies:
+## 2. Apply the Isolation Gate
 
-- the implementation is R3
-- parallel writers could change the same checkout
-- the work is long-lived and needs an isolated lifecycle
-- planned changes overlap paths already dirty in the working tree
+Isolation is required for R3 implementation, parallel writers, long-lived work needing a separate lifecycle, and dirty overlapping edits.
 
-Inspect the actual working tree with `git status --short` and compare dirty paths with the planned edit scope. A dirty tree that does not overlap the task is not, by itself, a reason to isolate.
+Also isolate when the user explicitly requests it. Compare the actual dirty paths
+with the intended edit scope; unrelated dirty files alone do not justify another
+workspace. Safe R0/R1 and ordinary R2 work in a clean, singly-owned checkout stay
+in place by default.
 
-R0/R1 and ordinary R2 work already in a safe clean checkout do not create a worktree by default. Work in place and skip to Step 2. An explicit user instruction to use a worktree still applies.
+Creating local reversible isolation is a normal implementation step when the authorized task activates this gate; ask only when the mechanism, location, branch lifecycle, or cleanup creates a material user choice or crosses the authorized scope.
 
-When the isolation gate applies, continue with mechanism consent. Isolation is required for R3 implementation, parallel writers, long-lived work that needs an isolated lifecycle, and dirty overlapping edits; consent chooses the mechanism, not whether to silently drop the gate.
+Honor a declared workspace or branch preference. If required isolation is
+declined or every mechanism is unavailable, stop before editing and request an
+explicitly named isolation waiver for the exact risk and owned scope. Generic
+permission to continue is not a waiver.
 
-Has the user already indicated their worktree preference in your instructions? If not, ask for consent before creating a worktree:
+## 3. Choose the Mechanism
 
-> "Would you like me to set up an isolated worktree? It protects your current branch from changes."
+1. Use an existing host-managed isolated workspace when one is already active.
+2. Otherwise prefer a native worktree/workspace tool exposed by the host. It owns
+   placement and cleanup; do not create parallel Git state behind its back.
+3. Use `git worktree` only when no native mechanism exists.
 
-Honor any existing declared preference without asking. If the user declines the
-available isolation mechanisms, stop before editing and request an explicitly
-named isolation waiver. Record exactly which isolation gate is waived and for
-which scope; generic permission to continue is not a waiver.
-
-## Step 1: Create Isolated Workspace
-
-**You have two mechanisms. Try them in this order.**
-
-### 1a. Native Worktree Tools (preferred)
-
-The user has asked for an isolated workspace (Step 0 consent). Do you already have a way to create a worktree? It might be a tool with a name like `EnterWorktree`, `WorktreeCreate`, a `/worktree` command, or a `--worktree` flag. If you do, use it and skip to Step 2.
-
-Native tools handle directory placement, branch creation, and cleanup automatically. Using `git worktree add` when you have a native tool creates phantom state your harness can't see or manage.
-
-Only proceed to Step 1b if you have no native worktree tool available.
-
-### 1b. Git Worktree Fallback
-
-**Only use this if Step 1a does not apply** — you have no native worktree tool available. Create a worktree manually using git.
-
-#### Directory Selection
-
-Follow this priority order. Explicit user preference always beats observed filesystem state.
-
-1. **Check your instructions for a declared worktree directory preference.** If the user has already specified one, use it without asking.
-
-2. **Check for an existing project-local worktree directory:**
-   ```bash
-   ls -d .worktrees 2>/dev/null     # Preferred (hidden)
-   ls -d worktrees 2>/dev/null      # Alternative
-   ```
-   If found, use it. If both exist, `.worktrees` wins.
-
-3. **If there is no other guidance available**, default to `.worktrees/` at the project root.
-
-#### Safety Verification (project-local directories only)
-
-**MUST verify directory is ignored before creating worktree:**
+For a manual worktree, follow explicit project guidance first, then an existing
+`.worktrees/` or `worktrees/` convention. For any project-local location, verify
+it is ignored before creation:
 
 ```bash
-git check-ignore -q .worktrees 2>/dev/null || git check-ignore -q worktrees 2>/dev/null
+git check-ignore -q .worktrees 2>/dev/null || \
+  git check-ignore -q worktrees 2>/dev/null
+git worktree add "$WORKTREE_PATH" -b "$BRANCH_NAME" "$BASE_SHA"
 ```
 
-**If NOT ignored:** Add to .gitignore, commit the change, then proceed.
+If the candidate directory is not ignored, choose an already supported ignored
+or external location. Changing `.gitignore` is a repository change and is not
+authorized merely by the need for isolation.
 
-**Why critical:** Prevents accidentally committing worktree contents to repository.
+If creation is denied, try another safe isolated mechanism already supported by
+the host, such as a host-managed workspace or disposable clone at the recorded
+base. If none exists, request the scoped waiver; never reinterpret denial as
+permission to edit an unsafe checkout.
 
-#### Create the Worktree
+## 4. Prepare Without Guessing
 
-```bash
-# Determine path based on chosen location
-path="$LOCATION/$BRANCH_NAME"
+Read project instructions, manifests, lockfiles, and existing dependency state to
+identify what setup is actually necessary. Do not auto-run a dependency command merely because a manifest file exists.
 
-git worktree add "$path" -b "$BRANCH_NAME"
-cd "$path"
-```
+Preview each necessary dependency command and its side effects before execution: network access, lifecycle scripts, tracked-file changes, global state, credentials, or new tools.
 
-**Sandbox denial:** If `git worktree add` is denied, try another safe isolated
-mechanism already supported by the host, such as a host-managed isolated
-workspace or a disposable clone at the recorded base commit. If none is
-available, stop before editing and request an explicitly named isolation waiver.
-Never convert sandbox denial into permission to edit the current checkout.
+- A lockfile-faithful, local setup already implied by the authorized build may be
+  executed as a normal implementation step.
+- Ask before a command adds dependencies or tools, changes tracked/global state,
+  runs untrusted lifecycle code outside existing authorization, or otherwise
+  crosses the task boundary.
+- Reuse valid existing artifacts when their inputs match. Do not reinstall simply
+  because the workspace is new.
 
-## Step 2: Project Setup
+## 5. Establish Proportionate Baseline Evidence
 
-Auto-detect and run appropriate setup:
+Scale baseline validation to risk and the affected surface; use the full suite when the risk or cross-cutting scope warrants it, not as a ritual for every worktree.
 
-```bash
-# Node.js
-if [ -f package.json ]; then npm install; fi
+Before editing, run the smallest deterministic checks that can distinguish new
+failures from pre-existing ones. Record the command, relevant inputs, result, and
+current tree/base binding. If a relevant baseline failure prevents safe proof,
+stop and diagnose or ask for direction. An unrelated known failure may be recorded
+and work may continue only when the requested result still has adequate evidence.
 
-# Rust
-if [ -f Cargo.toml ]; then cargo build; fi
+Report the workspace path, branch/detached state, base SHA, owned scope, setup
+performed, baseline evidence, and cleanup owner. Do not claim the entire project
+passes when only targeted checks ran.
 
-# Python
-if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-if [ -f pyproject.toml ]; then poetry install; fi
+## Non-Negotiable Boundaries
 
-# Go
-if [ -f go.mod ]; then go mod download; fi
-```
-
-## Step 3: Verify Clean Baseline
-
-Run tests to ensure workspace starts clean:
-
-```bash
-# Use project-appropriate command
-npm test / cargo test / pytest / go test ./...
-```
-
-**If tests fail:** Report failures, ask whether to proceed or investigate.
-
-**If tests pass:** Report ready.
-
-### Report
-
-```
-Worktree ready at <full-path>
-Tests passing (<N> tests, 0 failures)
-Ready to implement <feature-name>
-```
-
-## Quick Reference
-
-| Situation | Action |
-|-----------|--------|
-| Already in linked worktree | Skip creation (Step 0) |
-| In a submodule | Treat as normal repo (Step 0 guard) |
-| Safe clean R0/R1 or ordinary R2 | Work in place; skip creation |
-| R3, parallel writers, long-lived work, or dirty overlap | Request consent, then isolate |
-| Native worktree tool available | Use it (Step 1a) |
-| No native tool | Git worktree fallback (Step 1b) |
-| `.worktrees/` exists | Use it (verify ignored) |
-| `worktrees/` exists | Use it (verify ignored) |
-| Both exist | Use `.worktrees/` |
-| Neither exists | Check instruction file, then default `.worktrees/` |
-| Directory not ignored | Add to .gitignore + commit |
-| Permission error on create | Try another safe isolated mechanism; otherwise stop for an explicit waiver |
-| Tests fail during baseline | Report failures + ask |
-| No package.json/Cargo.toml | Skip dependency install |
-
-## Common Mistakes
-
-### Fighting the harness
-
-- **Problem:** Using `git worktree add` when the platform already provides isolation
-- **Fix:** Step 0 detects existing isolation. Step 1a defers to native tools.
-
-### Skipping detection
-
-- **Problem:** Creating a nested worktree inside an existing one
-- **Fix:** Always run Step 0 before creating anything
-
-### Isolating routine work by default
-
-- **Problem:** Creating worktrees for safe clean R0/R1 or ordinary R2 work adds branch and workspace overhead without a risk-based need
-- **Fix:** Apply the isolation gate first; create one for R3, parallel writers, long-lived work, dirty overlap, or explicit user direction
-
-### Skipping ignore verification
-
-- **Problem:** Worktree contents get tracked, pollute git status
-- **Fix:** Always use `git check-ignore` before creating project-local worktree
-
-### Assuming directory location
-
-- **Problem:** Creates inconsistency, violates project conventions
-- **Fix:** Follow priority: explicit instructions > existing project-local directory > default
-
-### Proceeding with failing tests
-
-- **Problem:** Can't distinguish new bugs from pre-existing issues
-- **Fix:** Report failures, get explicit permission to proceed
-
-### Silently dropping required isolation
-
-- **Problem:** A sandbox denial or declined mechanism turns into edits in the current checkout
-- **Fix:** Try another safe isolated mechanism or stop for an explicitly named isolation waiver
-
-## Red Flags
-
-**Never:**
-- Create a worktree when Step 0 detects existing isolation
-- Create a worktree by default for safe clean R0/R1 or ordinary R2 work
-- Use `git worktree add` when you have a native worktree tool (e.g., `EnterWorktree`). This is the #1 mistake — if you have it, use it.
-- Skip Step 1a by jumping straight to Step 1b's git commands
-- Treat sandbox denial or declined isolation as permission to edit the current checkout
-- Create worktree without verifying it's ignored (project-local)
-- Skip baseline test verification
-- Proceed with failing tests without asking
-
-**Always:**
-- Run Step 0 detection first
-- Apply the isolation gate before asking for consent or creating anything
-- Prefer native tools over git fallback
-- Preserve required isolation or obtain an explicitly named isolation waiver before editing
-- Follow directory priority: explicit instructions > existing project-local directory > default
-- Verify directory is ignored for project-local
-- Auto-detect and run project setup
-- Verify clean test baseline
+- Never nest a worktree inside an already isolated workspace.
+- Never let parallel writers share the same mutable checkout or owned files.
+- Never use manual `git worktree` behind a native workspace manager.
+- Never place a project-local worktree in a tracked directory.
+- Never edit an unsafe checkout after required isolation fails.
+- Never run dependency setup or a full test suite solely from filename heuristics.

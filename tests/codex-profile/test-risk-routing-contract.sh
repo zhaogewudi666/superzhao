@@ -170,6 +170,13 @@ require_text skills/using-git-worktrees/SKILL.md 'safe isolated mechanism' 'requ
 require_text skills/using-git-worktrees/SKILL.md 'explicitly named isolation waiver' 'required isolation can proceed only with a named waiver'
 require_text skills/using-git-worktrees/SKILL.md 'required for R3 implementation.*parallel writers.*long-lived.*dirty overlapping' 'every required isolation trigger keeps the gate'
 reject_text skills/using-git-worktrees/SKILL.md 'working in the current directory instead' 'sandbox denial never silently degrades required isolation'
+require_text skills/using-git-worktrees/SKILL.md 'Isolation record.*full base.*branch.*workspace.*mechanism.*owned path scope.*cleanup owner' 'worktree ownership and baseline are explicit'
+require_text skills/using-git-worktrees/SKILL.md 'local reversible isolation.*normal implementation step.*material user choice' 'routine safe isolation does not force a redundant consent turn'
+require_text skills/using-git-worktrees/SKILL.md 'Do not auto-run.*dependency.*manifest' 'worktree setup is inferred rather than triggered by filenames alone'
+require_text skills/using-git-worktrees/SKILL.md 'Preview.*dependency command.*side effects' 'dependency setup exposes consequential effects before execution'
+require_text skills/using-git-worktrees/SKILL.md 'baseline validation.*risk.*affected.*full suite' 'worktree baseline evidence scales to the change'
+reject_text skills/using-git-worktrees/SKILL.md 'if \[ -f package.json \]; then npm install' 'worktree setup does not blindly install dependencies'
+reject_text skills/using-git-worktrees/SKILL.md 'ask for consent before creating a worktree' 'safe local isolation does not require ritual consent'
 
 require_text skills/writing-plans/SKILL.md 'R2.*direct execution.*one final review' 'R2 plan handoff defaults to direct execution and one final review'
 require_text skills/writing-plans/SKILL.md 'R3.*Subagent-Driven.*default' 'R3 plan handoff defaults to SDD when available'

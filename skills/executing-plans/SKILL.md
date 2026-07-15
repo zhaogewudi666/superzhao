@@ -7,8 +7,7 @@ description: Use when a written implementation plan must be executed in a separa
 
 ## Overview
 
-Load the plan, preserve its risk-specific gates, execute each task, and report
-only after the required reviews and verification complete.
+Execute the plan as a living contract. Preserve goal, scope, public interfaces, invariants, risk, and authorization while adapting implementation details when evidence supports an equivalent route.
 
 **Announce at start:** "I'm using the executing-plans skill to implement this plan."
 
@@ -45,21 +44,22 @@ plan.
 ## The Process
 
 ### Step 1: Load and Review Plan
-1. Read plan file
-2. Review critically - identify any questions or concerns about the plan
-3. If concerns: Raise them with your human partner before starting
-4. If no concerns: Create todos for the plan items and proceed
+1. Read the plan and its bound source requirements.
+2. Confirm the source digest, base commit or state, owned scope, and risk route are current.
+3. Review dependencies, outputs, proof obligations, and material boundaries.
+4. Resolve material gaps before starting; otherwise create task tracking and proceed.
 
 ### Step 2: Execute Tasks
 
 For each task:
 1. Check the point-of-execution authorization gate for the task's next action
-2. Mark as in_progress
-3. Follow each step exactly
-4. Run the task's specified verification
-5. For R3, obtain the meaningful task-boundary review and resolve all Critical
+2. Confirm its dependencies and bound plan state still match the current tree
+3. Mark it in progress and implement its declared output
+4. For non-material changes such as file paths, internal symbols, or equivalent commands, record the reason and evidence, update the living plan, and continue when all material boundaries remain intact
+5. Run the task's specified verification and attach the observed completion evidence
+6. For R3, obtain the meaningful task-boundary review and resolve all Critical
    and Important findings before continuing; R2 does not force this review
-6. Mark as completed
+7. Mark verified only when the current output and evidence satisfy the task
 
 ### Step 3: Complete Development
 
@@ -77,13 +77,14 @@ After all tasks complete and verified:
 ## When to Stop and Ask for Help
 
 **STOP executing immediately when:**
-- Hit a blocker (missing dependency, test fails, instruction unclear)
+- Hit a blocker with no safe equivalent or evidence-backed recovery
 - Plan has critical gaps preventing starting
-- You don't understand an instruction
-- Verification fails repeatedly
+- The intended behavior or a material boundary is unclear
+- Verification fails and the cause is not yet understood
 - Required isolation is unavailable and no explicitly named waiver exists
 - Point-of-execution authorization is missing for the next gated action
 - A required independent review cannot be performed
+- Material drift changes the goal, scope, interfaces, invariants, risk, or authorization; stop and return for re-approval
 
 **Ask for clarification rather than guessing.**
 
@@ -91,13 +92,14 @@ After all tasks complete and verified:
 
 **Return to Review (Step 1) when:**
 - Partner updates the plan based on your feedback
-- Fundamental approach needs rethinking
+- New evidence changes a dependency or proof obligation
+- A material boundary requires re-approval
 
 **Don't force through blockers** - stop and ask.
 
 ## Remember
 - Review plan critically first
-- Follow plan steps exactly
+- Preserve material boundaries; adapt implementation details transparently
 - Don't skip verifications
 - Reference skills when plan says to
 - Stop when blocked, don't guess

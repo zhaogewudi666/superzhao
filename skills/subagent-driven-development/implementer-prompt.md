@@ -127,13 +127,15 @@ Dispatch a subagent:
     ## After Review Findings
 
     If a reviewer finds issues and you fix them, re-run the tests that cover
-    the amended code and append the results to your report file. Reviewers
-    will not re-run tests for you — your report is the test evidence.
+    the amended code and append the results to your report file. The report is
+    a precise claim for review, not proof by itself; the controller independently
+    verifies the exact reviewed HEAD.
 
     ## Report Format
 
     Write your full report to [REPORT_FILE]:
     - What you implemented (or what you attempted, if blocked)
+    - Full commit SHA and final working-tree status
     - What you tested and test results
     - **Validation Evidence**:
       - If TDD applies, RED and GREEN evidence is mandatory:
@@ -149,7 +151,7 @@ Dispatch a subagent:
     Then report back with ONLY (under 15 lines — the detail lives in the
     report file):
     - **Status:** DONE | DONE_WITH_CONCERNS | BLOCKED | NEEDS_CONTEXT
-    - Commits created (short SHA + subject)
+    - Commits created (full SHA + subject)
     - One-line test summary (e.g. "14/14 passing, output pristine")
     - Your concerns, if any
     - The report file path

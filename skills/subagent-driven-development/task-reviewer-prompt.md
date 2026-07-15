@@ -22,6 +22,7 @@ Dispatch a subagent:
     ## What Was Requested
 
     Read the task brief: [BRIEF_FILE]
+    Expected brief digest: [BRIEF_DIGEST]
 
     Global constraints from the spec/design that bind this task:
     [GLOBAL_CONSTRAINTS]
@@ -29,12 +30,18 @@ Dispatch a subagent:
     ## What the Implementer Claims They Built
 
     Read the implementer's report: [REPORT_FILE]
+    Expected report digest: [REPORT_DIGEST]
 
     ## Diff Under Review
 
     **Base:** [BASE_SHA]
     **Head:** [HEAD_SHA]
     **Diff file:** [DIFF_FILE]
+    **Expected diff digest:** [DIFF_DIGEST]
+
+    Before review, confirm the three artifact digests and full commit SHAs match
+    this binding. If any value differs, return `STALE REVIEW INPUT` without
+    reviewing a different tree or artifact.
 
     Read the diff file once — it contains the commit list, a stat summary,
     and the full diff with surrounding context, and it is your view of the
@@ -171,6 +178,8 @@ Dispatch a subagent:
     **Task quality:** [Approved | Needs fixes]
 
     **Reasoning:** [1-2 sentence technical assessment]
+
+    **Reviewed binding:** [BASE_SHA]..[HEAD_SHA], brief [BRIEF_DIGEST], report [REPORT_DIGEST], diff [DIFF_DIGEST]
 ```
 
 **Placeholders:**
@@ -178,17 +187,20 @@ Dispatch a subagent:
   positive integer string needed, or `all`)
 - `[BRIEF_FILE]` — REQUIRED: the task brief file (`scripts/task-brief PLAN N`
   prints the path; same file the implementer worked from)
+- `[BRIEF_DIGEST]` — REQUIRED: content digest recorded by the controller
 - `[GLOBAL_CONSTRAINTS]` — the binding requirements copied verbatim from
   the plan's Global Constraints section or the spec: exact values, formats,
   and stated relationships between components (not process rules — those
   are already in this template)
 - `[REPORT_FILE]` — REQUIRED: the file the implementer wrote its detailed
   report to
-- `[BASE_SHA]` — commit before this task
-- `[HEAD_SHA]` — current commit
+- `[REPORT_DIGEST]` — REQUIRED: content digest recorded by the controller
+- `[BASE_SHA]` — full commit SHA before this task
+- `[HEAD_SHA]` — full current commit SHA
 - `[DIFF_FILE]` — REQUIRED: the path the controller wrote the review
   package to (`scripts/review-package BASE HEAD` prints the unique path it
   wrote; the package never enters the controller's context)
+- `[DIFF_DIGEST]` — REQUIRED: review-package content digest recorded by the controller
 
 **Reviewer returns:** Spec Compliance verdict (✅/❌/⚠️), Strengths, Issues
 (Critical/Important/Minor), Task quality verdict

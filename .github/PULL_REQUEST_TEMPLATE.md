@@ -43,7 +43,8 @@ of human involvement will be closed without review.
 
      If your change is a new skill for a specific domain, workflow tool,
      or third-party integration, it belongs in its own plugin — not here.
-     See the plugin development docs for how to publish it separately. -->
+     See the [plugin development docs](../docs/plugin-development.md) for how
+     to publish it separately. -->
 
 ## What alternatives did you consider?
 <!-- What other approaches did you try or evaluate before landing on this

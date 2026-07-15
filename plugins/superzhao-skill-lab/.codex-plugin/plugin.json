@@ -1,0 +1,18 @@
+{
+  "name": "superzhao-skill-lab",
+  "version": "0.1.0",
+  "description": "Experimental manual workflow for evidence-file-bound existing-Skill body candidates.",
+  "author": {
+    "name": "Superzhao contributors"
+  },
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Superzhao Skill Lab",
+    "shortDescription": "Experimental existing-Skill candidate lab.",
+    "longDescription": "Experimental explicit-only workflow that applies operation and byte bounded body edits, verifies supplied evidence files and controls, and stages a self-contained hash-bound bundle for human review.",
+    "developerName": "Superzhao contributors",
+    "category": "Developer Tools",
+    "capabilities": ["skills", "scripts"],
+    "defaultPrompt": "Use $superzhao-skill-lab:optimize-agent-skill to evaluate a proposed Skill change without modifying the active Skill."
+  }
+}

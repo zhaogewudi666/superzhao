@@ -5,9 +5,9 @@ description: Use for material R2 logic before integration, at meaningful R3 task
 
 # Requesting Code Review
 
-Dispatch an independent code reviewer at risk-appropriate gates. Give the reviewer
-the requirements and review artifacts it needs plus an explicit conversation
-window, keeping it focused on the work product rather than your reasoning history.
+Dispatch an independent reviewer at risk-appropriate gates. A verdict is useful
+only when it is bound to the exact content, requirements, questions, and evidence
+that the reviewer inspected.
 
 **Core principle:** Independent review is strongest when its timing and scope match
 the risk of the change.
@@ -31,73 +31,44 @@ the risk of the change.
 - Before merging
 - When the user explicitly requests independent code review
 
-## How to Request
+## Review Binding
 
-**1. Record the complete review range:**
+Record one Review Binding before dispatch: full BASE and HEAD SHAs, working-tree state and content digest, changed-path scope, requirements content digest, relevant profile or tree digest, open questions, and controller-observed verification commands/results.
+
+- Use the merge base with the integration target as `BASE` for a whole-change
+  review. Do not infer the base from a commit count.
+- Prefer a clean committed tree. If the authorized review scope includes dirty or
+  untracked content, identify it explicitly and bind a digest of that exact patch
+  and file set; `BASE..HEAD` alone does not include it.
+- Use `not applicable` only when a field genuinely has no bearing on the change.
+  Do not silently omit unresolved compatibility, migration, or requirement
+  questions.
+- Verification evidence is a report of commands the controller actually observed,
+  not a child summary or an expectation that the reviewer will run the tests.
+
+For example, record full commit identities rather than short display SHAs:
+
 ```bash
 BASE_SHA="$RECORDED_START_SHA"  # commit recorded before the reviewed change began
 HEAD_SHA=$(git rev-parse HEAD)
 ```
 
-For a whole-change integration review, use the merge base with the integration
-target as `BASE_SHA` (for example, `git merge-base origin/main "$HEAD_SHA"`).
-Do not infer the base from the number of commits; the review range must include
-the entire change.
+## Request and Use the Review
 
-**2. Dispatch code reviewer subagent:**
-
-Dispatch a subagent, choose `fork_turns` explicitly, and fill the capability-neutral
-template at [code-reviewer.md](code-reviewer.md).
-
-**Placeholders:**
-- `{DESCRIPTION}` - Brief summary of what you built
-- `{PLAN_OR_REQUIREMENTS}` - What it should do
-- `{BASE_SHA}` - Starting commit
-- `{HEAD_SHA}` - Ending commit
-
-**3. Act on feedback:**
+1. Dispatch a subagent, choose `fork_turns` explicitly, and fill every field in
+   [code-reviewer.md](code-reviewer.md).
+2. Require the reviewer to echo the reviewed binding and flag any mismatch before
+   judging the implementation.
+3. Inspect the cited code and evidence yourself. A reviewer verdict is evidence to
+   evaluate, not a substitute for the controller's completion check.
+4. Act on feedback:
 - Fix Critical issues immediately
 - Fix Important issues before proceeding
-- Note Minor issues for later
+- Note optional Minor improvements for the final handoff unless they are in scope
 - Re-review after Critical or Important fixes
 - Push back only with concrete code, requirement, or test evidence when the reviewer is wrong
 
-The main agent must inspect the cited code and validation evidence before accepting
-either a finding or a rebuttal. A reviewer verdict is evidence to evaluate, not a
-substitute for the main agent's completion check.
-
-## Example
-
-```
-[Just completed Task 2: Add verification function]
-
-You: Let me request code review before proceeding.
-
-BASE_SHA=a7981ec  # recorded before Task 2 began
-HEAD_SHA=$(git rev-parse HEAD)
-
-[Dispatch code reviewer subagent]
-  DESCRIPTION: Added verifyIndex() and repairIndex() with 4 issue types
-  PLAN_OR_REQUIREMENTS: Task 2 from docs/superpowers/plans/deployment-plan.md
-  BASE_SHA: a7981ec
-  HEAD_SHA: 3df7661
-
-[Subagent returns]:
-  Strengths: Clean architecture, real tests
-  Issues:
-    Important: Missing progress indicators
-    Minor: Magic number (100) for reporting interval
-  Assessment: Needs fixes
-
-You: [Fix progress indicators and re-run the covering tests]
-[Dispatch code reviewer subagent for re-review]
-
-[Subagent returns]:
-  Issues: None
-  Assessment: Approved
-
-[Continue to Task 3]
-```
+When the review returns, recheck the binding; if content, HEAD, working tree, requirements, profile, scope, open questions, or verification inputs drifted, refresh the evidence and re-review the final content.
 
 ## Integration with Workflows
 
@@ -116,6 +87,7 @@ You: [Fix progress indicators and re-run the covering tests]
 
 **Never:**
 - Skip a review required by the risk gate, a pending merge, or the user
+- Treat approval of an earlier commit or patch as approval of later content
 - Ignore Critical issues
 - Proceed with unfixed Important issues
 - Argue with valid technical feedback

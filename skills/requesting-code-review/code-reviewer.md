@@ -21,15 +21,27 @@ Dispatch a subagent:
 
     [PLAN_OR_REQUIREMENTS]
 
-    ## Git Range to Review
+    ## Review Binding
 
-    **Base:** [BASE_SHA]
-    **Head:** [HEAD_SHA]
+    **Base (full SHA):** [BASE_SHA]
+    **Head (full SHA):** [HEAD_SHA]
+    **Working-tree state and content digest:** [WORKING_TREE_STATE_AND_DIGEST]
+    **Changed-path scope:** [CHANGED_PATH_SCOPE]
+    **Requirements content digest:** [REQUIREMENTS_DIGEST]
+    **Relevant profile or tree digest:** [PROFILE_OR_TREE_DIGEST]
+    **Open questions:** [OPEN_QUESTIONS]
+    **Controller-observed verification commands/results:** [VERIFICATION_EVIDENCE]
 
     ```bash
     git diff --stat [BASE_SHA]..[HEAD_SHA]
     git diff [BASE_SHA]..[HEAD_SHA]
+    git status --short
     ```
+
+    First confirm that the available checkout and artifacts match this binding.
+    If any field is missing, mismatched, or cannot be inspected, report the exact
+    mismatch and do not approve a different revision or scope. Include authorized
+    dirty and untracked content when the binding says it is part of the review.
 
     ## Read-Only Review
 
@@ -79,6 +91,11 @@ Dispatch a subagent:
     say so.
 
     ## Output Format
+
+    ### Reviewed binding
+    [Echo the full SHAs, tree/patch and requirements/profile digests, changed-path
+    scope, open questions, and verification evidence actually inspected. Identify
+    any mismatch.]
 
     ### Strengths
     [What's well done? Be specific.]
@@ -131,45 +148,13 @@ Dispatch a subagent:
   positive integer string needed, or `all`)
 - `[DESCRIPTION]` — brief summary of what was built
 - `[PLAN_OR_REQUIREMENTS]` — what it should do (plan file path, task text, or requirements)
-- `[BASE_SHA]` — starting commit
-- `[HEAD_SHA]` — ending commit
+- `[BASE_SHA]` — full starting commit SHA
+- `[HEAD_SHA]` — full ending commit SHA
+- `[WORKING_TREE_STATE_AND_DIGEST]` — clean state/tree identity, or the exact dirty patch and file-set digest
+- `[CHANGED_PATH_SCOPE]` — paths intended to be reviewed
+- `[REQUIREMENTS_DIGEST]` — digest of the exact requirements supplied
+- `[PROFILE_OR_TREE_DIGEST]` — relevant configuration/profile digest or Git tree identity
+- `[OPEN_QUESTIONS]` — unresolved questions, or `none`
+- `[VERIFICATION_EVIDENCE]` — controller-observed commands and results bound to the reviewed content
 
 **Reviewer returns:** Strengths, Issues (Critical / Important / Minor), Recommendations, Assessment
-
-## Example Output
-
-```
-### Strengths
-- Clean database schema with proper migrations (db.ts:15-42)
-- Comprehensive test coverage (18 tests, all edge cases)
-- Good error handling with fallbacks (summarizer.ts:85-92)
-
-### Issues
-
-#### Important
-1. **Missing help text in CLI wrapper**
-   - File: index-conversations:1-31
-   - Issue: No --help flag, users won't discover --concurrency
-   - Fix: Add --help case with usage examples
-
-2. **Date validation missing**
-   - File: search.ts:25-27
-   - Issue: Invalid dates silently return no results
-   - Fix: Validate ISO format, throw error with example
-
-#### Minor
-1. **Progress indicators**
-   - File: indexer.ts:130
-   - Issue: No "X of Y" counter for long operations
-   - Impact: Users don't know how long to wait
-
-### Recommendations
-- Add progress reporting for user experience
-- Consider config file for excluded projects (portability)
-
-### Assessment
-
-**Ready to merge: With fixes**
-
-**Reasoning:** Core implementation is solid with good architecture and tests. Important issues (help text, date validation) are easily fixed and don't affect core functionality.
-```

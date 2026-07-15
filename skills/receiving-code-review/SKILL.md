@@ -5,209 +5,93 @@ description: Use when receiving code review feedback, before implementing sugges
 
 # Code Review Reception
 
-## Overview
+Review feedback is a set of technical claims, not an order and not a social
+performance. Verify each claim against the requirements and current code before
+changing behavior.
 
-Code review requires technical evaluation, not emotional performance.
+**Core principle:** Evaluate per finding, preserve dependencies, and respond with
+evidence.
 
-**Core principle:** Verify before implementing. Ask before assuming. Technical correctness over social comfort.
+## Triage the Findings
 
-## The Response Pattern
+Read the complete review so dependencies and duplicate findings are visible. For
+each item, identify the claimed problem, affected requirement or invariant,
+severity, and supporting code or test evidence.
 
-```
-WHEN receiving code review feedback:
+Record one per-finding decision: accepted, rejected, or needs clarification, with the evidence and dependencies that justify it.
 
-1. READ: Complete feedback without reacting
-2. UNDERSTAND: Restate requirement in own words (or ask)
-3. VERIFY: Check against codebase reality
-4. EVALUATE: Technically sound for THIS codebase?
-5. RESPOND: Technical acknowledgment or reasoned pushback
-6. IMPLEMENT: One item at a time, test each
-```
+- **Accepted:** the finding is reproducible or follows from an applicable
+  requirement. State the behavior to change.
+- **Rejected:** code, tests, compatibility constraints, or scope show that the
+  proposed change is wrong or unnecessary. Cite that evidence.
+- **Needs clarification:** multiple materially different interpretations remain,
+  or the required product/architecture choice is not authorized.
 
-## Forbidden Responses
+A reviewer's severity label is an input, not a fact. Reclassify it when impact
+evidence warrants that, and never silently downgrade a security, data-loss, or
+contract issue.
 
-**NEVER:**
-- "You're absolutely right!" (explicit instruction-file violation)
-- "Great point!" / "Excellent feedback!" (performative)
-- "Let me implement that now" (before verification)
+## Handle Ambiguity by Dependency
 
-**INSTEAD:**
-- Restate the technical requirement
-- Ask clarifying questions
-- Push back with technical reasoning if wrong
-- Just start working (actions > words)
+An unclear finding pauses that finding and anything that depends on it; continue verifying or implementing independent accepted findings when safe.
 
-## Handling Unclear Feedback
+Ask one concise grouped question when the missing answer changes scope, public
+behavior, invariants, or the implementation of dependent findings. Do not invent
+the answer. If feedback conflicts with the user's prior decision, pause that
+affected branch and surface the conflict before changing it.
 
-```
-IF any item is unclear:
-  STOP - do not implement anything yet
-  ASK for clarification on unclear items
+Do not manufacture dependencies merely because findings arrived in one review.
+Likewise, do not proceed with an apparently independent fix when shared code or an
+unresolved requirement makes it dependent in practice.
 
-WHY: Items may be related. Partial understanding = wrong implementation.
-```
+## Verify Against This Codebase
 
-**Example:**
-```
-your human partner: "Fix 1-6"
-You understand 1,2,3,6. Unclear on 4,5.
+Before accepting external feedback, check the current implementation, relevant
+requirements, callers, supported platforms or versions, tests, and the reason the
+existing behavior exists. For a request to add a "proper" or generalized feature,
+confirm real usage and scope; otherwise keep it out as YAGNI.
 
-❌ WRONG: Implement 1,2,3,6 now, ask about 4,5 later
-✅ RIGHT: "I understand items 1,2,3,6. Need clarification on 4 and 5 before proceeding."
-```
+Feedback from the user expresses intent, but ambiguity and conflicts still need to
+be resolved. External feedback deserves the same technical inspection without
+assuming either correctness or error.
 
-## Source-Specific Handling
+If evidence cannot be obtained safely, state what is missing and what decision it
+prevents. Do not convert uncertainty into implementation confidence.
 
-### From your human partner
-- **Trusted** - implement after understanding
-- **Still ask** if scope unclear
-- **No performative agreement**
-- **Skip to action** or technical acknowledgment
+## Implement Accepted Findings
 
-### From External Reviewers
-```
-BEFORE implementing:
-  1. Check: Technically correct for THIS codebase?
-  2. Check: Breaks existing functionality?
-  3. Check: Reason for current implementation?
-  4. Check: Works on all platforms/versions?
-  5. Check: Does reviewer understand full context?
+- Address truly blocking findings first.
+- Work in dependency order. Independent mechanical findings may be handled as a
+  coherent batch; behavior changes need behavior-scoped proof.
+- Run the narrowest deterministic validation that proves each changed behavior,
+  then the relevant regression checks.
+- Re-evaluate downstream decisions when a fix changes the code or requirements
+  they were based on.
+- Keep optional adjacent improvements out of the patch unless the user expands
+  scope.
 
-IF suggestion seems wrong:
-  Push back with technical reasoning
+Use the normal risk gates for the resulting changes. Material fixes may require a
+fresh review of their exact final content; a prior reviewer verdict does not prove
+the corrected tree.
 
-IF can't easily verify:
-  Say so: "I can't verify this without [X]. Should I [investigate/ask/proceed]?"
+## Respond Technically
 
-IF conflicts with your human partner's prior decisions:
-  Stop and discuss with your human partner first
-```
+Prefer compact, falsifiable outcomes:
 
-**your human partner's rule:** "External feedback - be skeptical, but check carefully"
+- `Fixed: <behavior>; verified with <evidence>.`
+- `Not changing this: <code/requirement evidence>.`
+- `Need clarification on <specific choice>; findings 2 and 5 depend on it.`
 
-## YAGNI Check for "Professional" Features
-
-```
-IF reviewer suggests "implementing properly":
-  grep codebase for actual usage
-
-  IF unused: "This endpoint isn't called. Remove it (YAGNI)?"
-  IF used: Then implement properly
-```
-
-**your human partner's rule:** "You and reviewer both report to me. If we don't need this feature, don't add it."
-
-## Implementation Order
-
-```
-FOR multi-item feedback:
-  1. Clarify anything unclear FIRST
-  2. Then implement in this order:
-     - Blocking issues (breaks, security)
-     - Simple fixes (typos, imports)
-     - Complex fixes (refactoring, logic)
-  3. Test each fix individually
-  4. Verify no regressions
-```
-
-## When To Push Back
-
-Push back when:
-- Suggestion breaks existing functionality
-- Reviewer lacks full context
-- Violates YAGNI (unused feature)
-- Technically incorrect for this stack
-- Legacy/compatibility reasons exist
-- Conflicts with your human partner's architectural decisions
-
-**How to push back:**
-- Use technical reasoning, not defensiveness
-- Ask specific questions
-- Reference working tests/code
-- Involve your human partner if architectural
-
-**If you're uncomfortable pushing back out loud:** Name that tension, then tell your partner about the issue you've seen. They'll appreciate your honesty.
-
-## Acknowledging Correct Feedback
-
-When feedback IS correct:
-```
-✅ "Fixed. [Brief description of what changed]"
-✅ "Good catch - [specific issue]. Fixed in [location]."
-✅ [Just fix it and show in the code]
-
-❌ "You're absolutely right!"
-❌ "Great point!"
-❌ "Thanks for catching that!"
-❌ "Thanks for [anything]"
-❌ ANY gratitude expression
-```
-
-**Why no thanks:** Actions speak. Just fix it. The code itself shows you heard the feedback.
-
-**If you catch yourself about to write "Thanks":** DELETE IT. State the fix instead.
-
-## Gracefully Correcting Your Pushback
-
-If you pushed back and were wrong:
-```
-✅ "You were right - I checked [X] and it does [Y]. Implementing now."
-✅ "Verified this and you're correct. My initial understanding was wrong because [reason]. Fixing."
-
-❌ Long apology
-❌ Defending why you pushed back
-❌ Over-explaining
-```
-
-State the correction factually and move on.
-
-## Common Mistakes
-
-| Mistake | Fix |
-|---------|-----|
-| Performative agreement | State requirement or just act |
-| Blind implementation | Verify against codebase first |
-| Batch without testing | One at a time, test each |
-| Assuming reviewer is right | Check if breaks things |
-| Avoiding pushback | Technical correctness > comfort |
-| Partial implementation | Clarify all items first |
-| Can't verify, proceed anyway | State limitation, ask for direction |
-
-## Real Examples
-
-**Performative Agreement (Bad):**
-```
-Reviewer: "Remove legacy code"
-❌ "You're absolutely right! Let me remove that..."
-```
-
-**Technical Verification (Good):**
-```
-Reviewer: "Remove legacy code"
-✅ "Checking... build target is 10.15+, this API needs 13+. Need legacy for backward compat. Current impl has wrong bundle ID - fix it or drop pre-13 support?"
-```
-
-**YAGNI (Good):**
-```
-Reviewer: "Implement proper metrics tracking with database, date filters, CSV export"
-✅ "Grepped codebase - nothing calls this endpoint. Remove it (YAGNI)? Or is there usage I'm missing?"
-```
-
-**Unclear Item (Good):**
-```
-your human partner: "Fix items 1-6"
-You understand 1,2,3,6. Unclear on 4,5.
-✅ "Understand 1,2,3,6. Need clarification on 4 and 5 before implementing."
-```
+Do not substitute praise, gratitude, or automatic agreement for evaluation. If
+your earlier pushback was wrong, state the new evidence and corrected decision
+without defending the old position.
 
 ## GitHub Thread Replies
 
-When replying to inline review comments on GitHub, reply in the comment thread (`gh api repos/{owner}/{repo}/pulls/{pr}/comments/{id}/replies`), not as a top-level PR comment.
+When authorized to reply to inline GitHub review comments, reply in the existing
+thread rather than creating an unrelated top-level comment.
 
 ## The Bottom Line
 
-**External feedback = suggestions to evaluate, not orders to follow.**
-
-Verify. Question. Then implement.
-
-No performative agreement. Technical rigor always.
+Evaluate each finding, clarify only what is genuinely ambiguous, and implement the
+supported decisions with current evidence.

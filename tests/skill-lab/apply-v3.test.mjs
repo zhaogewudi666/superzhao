@@ -1,11 +1,16 @@
 import assert from "node:assert/strict";
 import {
   existsSync,
+  mkdtempSync,
   mkdirSync,
   readFileSync,
+  readdirSync,
+  rmSync,
   symlinkSync,
+  truncateSync,
   writeFileSync,
 } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, resolve } from "node:path";
 import test from "node:test";
 
@@ -146,6 +151,12 @@ test("v3 apply rejects closed-schema and provenance inconsistencies with exit 2"
     }, /source_types|duplicate/i],
     ["bad source type", (patch) => { patch.edits[0].source_types = ["theory"]; }, /source_types/i],
     ["bad assumption status", (patch) => { patch.assumptions[0].status = "maybe"; }, /assumption|status/i],
+    ["multibyte target overflow", (patch) => {
+      patch.edits[0].target = "é".repeat(4096);
+    }, /4096 UTF-8 bytes/i],
+    ["multibyte content overflow", (patch) => {
+      patch.edits[0].content = "é".repeat(4096);
+    }, /4096 UTF-8 bytes/i],
     ["bad rejection relationship", (patch) => {
       patch.prior_rejections[0].relationship = "similar";
     }, /relationship/i],
@@ -175,6 +186,7 @@ test("v3 apply classifies unsafe paths and digest drift as integrity exit 3", ()
     ["prior digest", (patch) => { patch.prior_rejections[0].report.sha256 = "0".repeat(64); }, /sha256|digest/i],
     ["prior traversal", (patch) => { patch.prior_rejections[0].report.path = "../outside"; }, /relative|traversal|path/i],
     ["prior backslash", (patch) => { patch.prior_rejections[0].report.path = "rejections\\prior.json"; }, /forward slashes|path/i],
+    ["prior drive-absolute", (patch) => { patch.prior_rejections[0].report.path = "C:/prior.json"; }, /drive|relative|path/i],
   ]) {
     const f = makeFixture();
     try {
@@ -205,6 +217,153 @@ test("v3 apply classifies a symlinked patch input as integrity exit 3", () => {
     assertNoApplyOutput(f);
   } finally {
     f.cleanup();
+  }
+});
+
+test("v3 apply classifies unsafe edits and workspace paths before schema diagnostics", () => {
+  const cases = [
+    ["outside physical edits", (f, outside) => {
+      f.edits = resolve(outside, "patch.json");
+      writeJson(f.edits, basePatch(f));
+    }],
+    ["outside-resolving edits symlink", (f, outside) => {
+      const target = resolve(outside, "patch.json");
+      writeJson(target, basePatch(f));
+      symlinkSync(target, f.edits);
+    }],
+    ["dangling edits symlink", (f) => {
+      symlinkSync(resolve(f.root, "missing-patch.json"), f.edits);
+    }],
+    ["malformed JSON through edits symlink", (f) => {
+      const target = resolve(f.root, "malformed-patch.json");
+      writeFileSync(target, '{"schema":"superzhao.skill-lab.patch/v3"');
+      symlinkSync(target, f.edits);
+    }],
+    ["schema-invalid v3 through edits symlink", (f) => {
+      const target = resolve(f.root, "invalid-patch.json");
+      writeJson(target, { schema: "superzhao.skill-lab.patch/v3" });
+      symlinkSync(target, f.edits);
+    }],
+    ["symlinked workspace root", (f, outside) => {
+      const workspaceLink = resolve(outside, "workspace-link");
+      symlinkSync(f.root, workspaceLink, "dir");
+      f.root = workspaceLink;
+      writeJson(f.edits, basePatch(f));
+    }],
+    ["workspace root is a file", (f) => {
+      writeJson(f.edits, basePatch(f));
+      f.root = f.source;
+    }],
+  ];
+
+  for (const [label, setup] of cases) {
+    const f = makeFixture();
+    const outside = mkdtempSync(resolve(tmpdir(), "superzhao-skill-lab-path-outside-"));
+    try {
+      setup(f, outside);
+      const result = runCli(applyArgs(f));
+      assert.equal(result.status, 3, `${label}: ${result.stderr}`);
+      assert.match(result.stderr, /unsafe_path_or_integrity|physical|outside|symbolic|path/i);
+      assertNoApplyOutput(f);
+    } finally {
+      f.cleanup();
+      rmSync(outside, { recursive: true, force: true });
+    }
+  }
+});
+
+test("v3 apply keeps physical malformed JSON in the usage/schema exit class", () => {
+  const f = makeFixture();
+  try {
+    writeFileSync(f.edits, '{"schema":"superzhao.skill-lab.patch/v3"');
+    const result = runCli(applyArgs(f));
+    assert.equal(result.status, 2, result.stderr);
+    assert.match(result.stderr, /usage_or_schema|valid JSON|malformed|unexpected/i);
+    assertNoApplyOutput(f);
+  } finally {
+    f.cleanup();
+  }
+});
+
+test("v3 apply rejects component and final input swaps before reading outside bytes", () => {
+  for (const swapKind of ["component", "final"]) {
+    const f = makeFixture();
+    const outside = mkdtempSync(resolve(tmpdir(), "superzhao-skill-lab-outside-"));
+    try {
+      const relative = `rejections/${swapKind}/report.bin`;
+      const insideDirectory = resolve(f.root, "rejections", swapKind);
+      const inside = resolve(f.root, relative);
+      const safeBytes = Buffer.from(`inside ${swapKind} report\n`);
+      mkdirSync(insideDirectory, { recursive: true, mode: 0o700 });
+      writeFileSync(inside, safeBytes);
+
+      const outsideDirectory = resolve(outside, "redirected");
+      const outsideFile = resolve(outsideDirectory, "report.bin");
+      const readMarker = resolve(outside, "outside-read-attempted");
+      mkdirSync(outsideDirectory, { mode: 0o700 });
+      writeFileSync(outsideFile, "");
+      truncateSync(outsideFile, MAX_INPUT_BYTES + 1);
+
+      const prior = {
+        rejection_id: `swap-${swapKind}`,
+        report: artifact(relative, safeBytes),
+        relationship: "narrows",
+        note: "The path must remain physically bound through the descriptor read.",
+      };
+      writeJson(f.edits, basePatch(f, { prior_rejections: [prior] }));
+
+      const hook = `const fs = require("node:fs");\n`
+        + `const { syncBuiltinESMExports } = require("node:module");\n`
+        + `const originalRealpath = fs.realpathSync;\n`
+        + `const originalReadFile = fs.readFileSync;\n`
+        + `const originalRead = fs.readSync;\n`
+        + `const target = ${JSON.stringify(inside)};\n`
+        + `const component = ${JSON.stringify(insideDirectory)};\n`
+        + `const outsideDirectory = ${JSON.stringify(outsideDirectory)};\n`
+        + `const outsideFile = ${JSON.stringify(outsideFile)};\n`
+        + `const marker = ${JSON.stringify(readMarker)};\n`
+        + `const kind = ${JSON.stringify(swapKind)};\n`
+        + `let swapped = false;\n`
+        + `fs.realpathSync = function(path, ...args) {\n`
+        + `  const result = originalRealpath.call(this, path, ...args);\n`
+        + `  if (!swapped && path === target) {\n`
+        + `    swapped = true;\n`
+        + `    if (kind === "component") {\n`
+        + `      fs.renameSync(component, component + ".inside");\n`
+        + `      fs.symlinkSync(outsideDirectory, component, "dir");\n`
+        + `    } else {\n`
+        + `      fs.renameSync(target, target + ".inside");\n`
+        + `      fs.symlinkSync(outsideFile, target, "file");\n`
+        + `    }\n`
+        + `  }\n`
+        + `  return result;\n`
+        + `};\n`
+        + `fs.readFileSync = function(path, ...args) {\n`
+        + `  if (swapped && path === target) fs.writeFileSync(marker, "readFileSync");\n`
+        + `  return originalReadFile.call(this, path, ...args);\n`
+        + `};\n`
+        + `fs.readSync = function(fd, ...args) {\n`
+        + `  const actual = fs.fstatSync(fd);\n`
+        + `  const external = fs.lstatSync(outsideFile);\n`
+        + `  if (actual.dev === external.dev && actual.ino === external.ino) {\n`
+        + `    fs.writeFileSync(marker, "readSync");\n`
+        + `  }\n`
+        + `  return originalRead.call(this, fd, ...args);\n`
+        + `};\n`
+        + `syncBuiltinESMExports();\n`;
+      const result = runWithHook(f, applyArgs(f), hook);
+      assert.equal(
+        existsSync(readMarker),
+        false,
+        `${swapKind}: outside bytes must not be read`,
+      );
+      assert.equal(result.status, 3, `${swapKind}: ${result.stderr}`);
+      assert.match(result.stderr, /unsafe_path_or_integrity|contain|symbolic|identity|path/i);
+      assertNoApplyOutput(f);
+    } finally {
+      f.cleanup();
+      rmSync(outside, { recursive: true, force: true });
+    }
   }
 });
 
@@ -307,6 +466,113 @@ test("v3 apply treats an existing output and a publication race as exit 6", () =
     assert.equal(existsSync(race.candidate), false, "owned candidate rolls back");
   } finally {
     race.cleanup();
+  }
+});
+
+test("v3 apply removes its outside link and returns exit 3 when a parent retargets", () => {
+  const f = makeFixture();
+  const outside = mkdtempSync(resolve(tmpdir(), "superzhao-skill-lab-publish-outside-"));
+  try {
+    const outputParent = resolve(f.root, "publish");
+    const retainedParent = `${outputParent}.inside`;
+    mkdirSync(outputParent, { mode: 0o700 });
+    f.candidate = resolve(outputParent, "candidate.md");
+    f.applyReport = resolve(outputParent, "apply-report.json");
+    writeJson(f.edits, basePatch(f));
+
+    const hook = `const fs = require("node:fs");\n`
+      + `const { syncBuiltinESMExports } = require("node:module");\n`
+      + `const original = fs.linkSync;\n`
+      + `const candidate = ${JSON.stringify(f.candidate)};\n`
+      + `const parent = ${JSON.stringify(outputParent)};\n`
+      + `const retained = ${JSON.stringify(retainedParent)};\n`
+      + `const outside = ${JSON.stringify(outside)};\n`
+      + `let redirected = false;\n`
+      + `fs.linkSync = function(source, destination) {\n`
+      + `  if (!redirected && destination === candidate) {\n`
+      + `    redirected = true;\n`
+      + `    const stable = require("node:path").join(outside, ".pinned-temp");\n`
+      + `    original.call(this, source, stable);\n`
+      + `    fs.renameSync(parent, retained);\n`
+      + `    fs.symlinkSync(outside, parent, "dir");\n`
+      + `    fs.mkdirSync(require("node:path").dirname(source), { recursive: true });\n`
+      + `    original.call(this, stable, source);\n`
+      + `    const result = original.call(this, source, destination);\n`
+      + `    fs.rmSync(source);\n`
+      + `    fs.rmSync(stable);\n`
+      + `    return result;\n`
+      + `  }\n`
+      + `  return original.call(this, source, destination);\n`
+      + `};\n`
+      + `syncBuiltinESMExports();\n`;
+    const result = runWithHook(f, applyArgs(f), hook);
+    assert.equal(
+      existsSync(resolve(outside, "candidate.md")),
+      false,
+      "an owned link published through the retargeted parent must be removed",
+    );
+    assert.equal(existsSync(resolve(outside, "apply-report.json")), false);
+    assert.equal(existsSync(resolve(retainedParent, "candidate.md")), false);
+    assert.equal(existsSync(resolve(retainedParent, "apply-report.json")), false);
+    assert.equal(result.status, 3, result.stderr);
+    assert.match(result.stderr, /unsafe_path_or_integrity|contain|identity|parent|path/i);
+  } finally {
+    f.cleanup();
+    rmSync(outside, { recursive: true, force: true });
+  }
+});
+
+test("v3 apply removes only its pinned temp after a temp write failure", () => {
+  const f = makeFixture();
+  try {
+    writeJson(f.edits, basePatch(f));
+    const hook = `const fs = require("node:fs");\n`
+      + `const { syncBuiltinESMExports } = require("node:module");\n`
+      + `const original = fs.writeFileSync;\n`
+      + `let injected = false;\n`
+      + `fs.writeFileSync = function(path, ...args) {\n`
+      + `  if (!injected && typeof path === "number") {\n`
+      + `    injected = true;\n`
+      + `    const error = new Error("simulated temporary write failure");\n`
+      + `    error.code = "ENOSPC";\n`
+      + `    throw error;\n`
+      + `  }\n`
+      + `  return original.call(this, path, ...args);\n`
+      + `};\n`
+      + `syncBuiltinESMExports();\n`;
+    const result = runWithHook(f, applyArgs(f), hook);
+    assert.equal(
+      readdirSync(f.root).some((name) => name.startsWith(".skill-lab-apply-")),
+      false,
+      "the pinned temporary source must be removed",
+    );
+    assert.equal(result.status, 6, result.stderr);
+    assert.match(result.stderr, /publication_failure|temporary|ENOSPC|write/i);
+    assertNoApplyOutput(f);
+  } finally {
+    f.cleanup();
+  }
+});
+
+test("v3 apply checks a symlinked output parent before an outside destination", () => {
+  const f = makeFixture();
+  const outside = mkdtempSync(resolve(tmpdir(), "superzhao-skill-lab-output-outside-"));
+  try {
+    const linkedParent = resolve(f.root, "linked-output");
+    const outsideCandidate = resolve(outside, "candidate.md");
+    writeFileSync(outsideCandidate, "foreign outside candidate");
+    symlinkSync(outside, linkedParent, "dir");
+    f.candidate = resolve(linkedParent, "candidate.md");
+    writeJson(f.edits, basePatch(f));
+
+    const result = runCli(applyArgs(f));
+    assert.equal(result.status, 3, result.stderr);
+    assert.match(result.stderr, /unsafe_path_or_integrity|physical|symbolic|parent|outside/i);
+    assert.equal(readFileSync(outsideCandidate, "utf8"), "foreign outside candidate");
+    assert.equal(existsSync(f.applyReport), false);
+  } finally {
+    f.cleanup();
+    rmSync(outside, { recursive: true, force: true });
   }
 });
 

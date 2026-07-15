@@ -135,7 +135,7 @@
     },
     "path": {
       "type": "string",
-      "pattern": "^(?!/)(?!.*//)(?!.*(?:^|/)(?:\\.{1,2})(?:/|$))(?!.*\\\\)(?!.*[\\u0000-\\u001f\\u007f])[^/]+(?:/[^/]+)*$"
+      "pattern": "^(?!/)(?![A-Za-z]:/)(?!.*//)(?!.*(?:^|/)(?:\\.{1,2})(?:/|$))(?!.*\\\\)(?!.*[\\u0000-\\u001f\\u007f])[^/]+(?:/[^/]+)*$"
     },
     "nonBlank": {
       "type": "string",
@@ -216,11 +216,13 @@
         },
         "target": {
           "type": "string",
-          "maxLength": 4096
+          "maxLength": 4096,
+          "x-maxUtf8Bytes": 4096
         },
         "content": {
           "type": "string",
-          "maxLength": 4096
+          "maxLength": 4096,
+          "x-maxUtf8Bytes": 4096
         },
         "rationale": {
           "$ref": "#/$defs/nonBlank"
@@ -267,7 +269,8 @@
               "content": {
                 "type": "string",
                 "minLength": 1,
-                "maxLength": 4096
+                "maxLength": 4096,
+                "x-maxUtf8Bytes": 4096
               }
             }
           }
@@ -286,7 +289,8 @@
               "target": {
                 "type": "string",
                 "minLength": 1,
-                "maxLength": 4096
+                "maxLength": 4096,
+                "x-maxUtf8Bytes": 4096
               },
               "content": {
                 "const": ""
@@ -308,12 +312,14 @@
               "target": {
                 "type": "string",
                 "minLength": 1,
-                "maxLength": 4096
+                "maxLength": 4096,
+                "x-maxUtf8Bytes": 4096
               },
               "content": {
                 "type": "string",
                 "minLength": 1,
-                "maxLength": 4096
+                "maxLength": 4096,
+                "x-maxUtf8Bytes": 4096
               }
             }
           }

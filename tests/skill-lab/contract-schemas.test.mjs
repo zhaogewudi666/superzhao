@@ -29,6 +29,13 @@ function assertInvalid(value, schema, label) {
   assert.notDeepEqual(schemaErrors(value, schema), [], label);
 }
 
+function collectSchemaNodes(value, predicate, nodes = []) {
+  if (!value || typeof value !== "object") return nodes;
+  if (predicate(value)) nodes.push(value);
+  for (const child of Object.values(value)) collectSchemaNodes(child, predicate, nodes);
+  return nodes;
+}
+
 test("all eight v3 golden examples validate against exact closed schemas", () => {
   for (const [name, schemaName] of CONTRACTS) {
     const { schema, example } = readSchemaPair(name);
@@ -70,6 +77,44 @@ test("patch schema and example pin provenance, operations, and rejection enums",
     const value = clone(example);
     mutate(value);
     assertInvalid(value, schema, label);
+  }
+});
+
+test("all v3 artifact paths reject Windows drive-absolute prefixes", () => {
+  const pathContracts = CONTRACTS.filter(([name]) => name !== "gate-report");
+  assert.equal(pathContracts.length, 7);
+  for (const [name] of pathContracts) {
+    const { schema } = readSchemaPair(name);
+    assert.ok(schema.$defs?.path, `${name} must define its artifact path contract`);
+    for (const path of ["C:/artifact.bin", "z:/nested/artifact.bin"]) {
+      assertInvalid(path, schema.$defs.path, `${name} must reject ${path}`);
+    }
+  }
+});
+
+test("patch string schemas enforce the 4096 UTF-8 byte contract", () => {
+  const { schema, example } = readSchemaPair("patch");
+  const byteBoundedNodes = collectSchemaNodes(
+    schema,
+    (node) => node.maxLength === 4096,
+  );
+  assert.equal(byteBoundedNodes.length, 6);
+  for (const node of byteBoundedNodes) {
+    assert.equal(node["x-maxUtf8Bytes"], 4096);
+  }
+
+  const exact = "é".repeat(2048);
+  for (const field of ["target", "content"]) {
+    const value = clone(example);
+    value.edits[0][field] = exact;
+    assertValid(value, schema, `${field} accepts exactly 4096 UTF-8 bytes`);
+  }
+
+  const oversized = "é".repeat(4096);
+  for (const field of ["target", "content"]) {
+    const value = clone(example);
+    value.edits[0][field] = oversized;
+    assertInvalid(value, schema, `${field} rejects 8192 UTF-8 bytes`);
   }
 });
 

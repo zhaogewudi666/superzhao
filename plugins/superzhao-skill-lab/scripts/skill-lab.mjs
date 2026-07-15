@@ -1,13 +1,18 @@
 #!/usr/bin/env node
 
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import {
+  closeSync,
+  constants as fsConstants,
   existsSync,
+  fstatSync,
   linkSync,
   lstatSync,
   mkdirSync,
   mkdtempSync,
+  openSync,
   readFileSync,
+  readSync,
   realpathSync,
   rmSync,
   writeFileSync,
@@ -282,37 +287,6 @@ function readRegularFile(path, label) {
   return readFileSync(path);
 }
 
-function readLimitedInput(path, label, { allowSymbolicLinkPeek = false } = {}) {
-  let stat;
-  try {
-    stat = lstatSync(path);
-  } catch {
-    throw new CliError(`${label} does not exist: ${path}`);
-  }
-  if (stat.isSymbolicLink() && allowSymbolicLinkPeek) {
-    try {
-      stat = lstatSync(realpathSync(path));
-    } catch {
-      throw new CliError(`${label} symbolic-link target does not exist: ${path}`);
-    }
-  }
-  if (stat.isSymbolicLink() || !stat.isFile()) {
-    throw new CliError(`${label} must be a physical regular file: ${path}`);
-  }
-  if (!Number.isSafeInteger(stat.size) || stat.size > MAX_INPUT_BYTES) {
-    throw new CliError(
-      `${label} exceeds the ${MAX_INPUT_BYTES}-byte (8 MiB) input limit`,
-    );
-  }
-  const bytes = readFileSync(path);
-  if (bytes.length > MAX_INPUT_BYTES) {
-    throw new CliError(
-      `${label} exceeds the ${MAX_INPUT_BYTES}-byte (8 MiB) input limit`,
-    );
-  }
-  return bytes;
-}
-
 function parseJson(buffer, label) {
   try {
     const text = decodeUtf8(buffer, label);
@@ -412,15 +386,9 @@ function writeTwoOutputs(
   reportPath,
   report,
   inputs,
-  publicationStatus = null,
 ) {
-  try {
-    assertNewPhysicalOutput(candidatePath, inputs, "candidate output");
-    assertNewPhysicalOutput(reportPath, [...inputs, candidatePath], "report output");
-  } catch (error) {
-    if (publicationStatus) throw reclassify(error, publicationStatus);
-    throw error;
-  }
+  assertNewPhysicalOutput(candidatePath, inputs, "candidate output");
+  assertNewPhysicalOutput(reportPath, [...inputs, candidatePath], "report output");
   let candidateTempDir;
   let reportTempDir;
   let candidateTemp;
@@ -444,11 +412,305 @@ function writeTwoOutputs(
     bestEffortRemoveTree(candidateTempDir);
     bestEffortRemoveTree(reportTempDir);
     const message = `could not publish apply artifacts: ${error.message}`;
-    if (publicationStatus) throw classifiedError(publicationStatus, message);
     throw new CliError(message);
   }
   bestEffortRemoveTree(candidateTempDir);
   bestEffortRemoveTree(reportTempDir);
+}
+
+function sameBigIntIdentity(left, right) {
+  return left.dev === right.dev && left.ino === right.ino && left.ino !== 0n;
+}
+
+function inspectV3OutputParent(workspace, parentAbsolute, label) {
+  if (!isWithin(workspace.rootAbsolute, parentAbsolute)) {
+    throw classifiedError(
+      "unsafe_path_or_integrity",
+      `${label} parent is outside the workspace root`,
+    );
+  }
+  const relativeParent = relative(workspace.rootAbsolute, parentAbsolute);
+  const parts = relativeParent ? relativeParent.split(sep) : [];
+  let current = workspace.rootAbsolute;
+  const chain = [];
+  for (let index = -1; index < parts.length; index += 1) {
+    if (index >= 0) current = resolve(current, parts[index]);
+    let stat;
+    try {
+      stat = lstatSync(current, { bigint: true });
+    } catch (error) {
+      throw classifiedError(
+        "unsafe_path_or_integrity",
+        `${label} parent component is unavailable: ${error.message}`,
+      );
+    }
+    if (stat.isSymbolicLink() || !stat.isDirectory()) {
+      throw classifiedError(
+        "unsafe_path_or_integrity",
+        `${label} parent components must be physical directories`,
+      );
+    }
+    chain.push({ dev: stat.dev, ino: stat.ino });
+  }
+  let real;
+  try {
+    real = realpathSync(current);
+  } catch (error) {
+    throw classifiedError(
+      "unsafe_path_or_integrity",
+      `${label} parent could not be resolved physically: ${error.message}`,
+    );
+  }
+  if (!isWithin(workspace.rootReal, real)) {
+    throw classifiedError(
+      "unsafe_path_or_integrity",
+      `${label} parent resolves outside the workspace root`,
+    );
+  }
+  return { absolute: current, real, chain };
+}
+
+function lstatV3Output(path, label) {
+  try {
+    return lstatSync(path, { bigint: true });
+  } catch (error) {
+    if (error?.code === "ENOENT") return null;
+    throw classifiedError(
+      "unsafe_path_or_integrity",
+      `${label} could not be inspected without following links: ${error.message}`,
+    );
+  }
+}
+
+function bindV3Output(workspace, outputInput, inputs, label) {
+  const absolute = resolve(outputInput);
+  if (!isWithin(workspace.rootAbsolute, absolute)) {
+    throw classifiedError(
+      "unsafe_path_or_integrity",
+      `${label} is outside the workspace root`,
+    );
+  }
+  if (inputs.some((input) => resolve(input) === absolute)) {
+    throw classifiedError("publication_failure", `${label} cannot overwrite an input file`);
+  }
+  const parent = inspectV3OutputParent(workspace, dirname(absolute), label);
+  if (lstatV3Output(absolute, label)) {
+    throw classifiedError("publication_failure", `${label} already exists: ${outputInput}`);
+  }
+  return {
+    workspace,
+    absolute,
+    label,
+    parentAbsolute: parent.absolute,
+    parentReal: parent.real,
+    parentChain: parent.chain,
+  };
+}
+
+function verifyV3OutputParent(binding) {
+  const current = inspectV3OutputParent(
+    binding.workspace,
+    binding.parentAbsolute,
+    binding.label,
+  );
+  if (current.real !== binding.parentReal
+      || current.chain.length !== binding.parentChain.length
+      || current.chain.some((entry, index) => (
+        entry.dev !== binding.parentChain[index].dev
+        || entry.ino !== binding.parentChain[index].ino
+      ))) {
+    throw classifiedError(
+      "unsafe_path_or_integrity",
+      `${binding.label} parent physical identity changed during publication`,
+    );
+  }
+  return current;
+}
+
+function assertV3OutputAbsent(binding) {
+  verifyV3OutputParent(binding);
+  if (lstatV3Output(binding.absolute, binding.label)) {
+    throw classifiedError(
+      "publication_failure",
+      `${binding.label} already exists: ${binding.absolute}`,
+    );
+  }
+}
+
+function inspectOwnedRegularFile(path, expected, label) {
+  const stat = lstatV3Output(path, label);
+  if (!stat || stat.isSymbolicLink() || !stat.isFile()
+      || !sameBigIntIdentity(stat, expected)) {
+    throw classifiedError(
+      "unsafe_path_or_integrity",
+      `${label} physical identity does not match its bound temporary source`,
+    );
+  }
+  return stat;
+}
+
+function assertV3TempOwned(binding, temporary) {
+  verifyV3OutputParent(binding);
+  inspectOwnedRegularFile(temporary.path, temporary.stat, `${binding.label} temporary source`);
+  let real;
+  try {
+    real = realpathSync(temporary.path);
+  } catch (error) {
+    throw classifiedError(
+      "unsafe_path_or_integrity",
+      `${binding.label} temporary source could not be resolved: ${error.message}`,
+    );
+  }
+  if (dirname(real) !== binding.parentReal) {
+    throw classifiedError(
+      "unsafe_path_or_integrity",
+      `${binding.label} temporary source left its bound parent`,
+    );
+  }
+}
+
+function assertV3OutputOwned(binding, temporary) {
+  verifyV3OutputParent(binding);
+  inspectOwnedRegularFile(binding.absolute, temporary.stat, binding.label);
+}
+
+function removePathIfOwned(path, expected) {
+  let stat;
+  try {
+    stat = lstatSync(path, { bigint: true });
+  } catch {
+    return;
+  }
+  if (stat.isSymbolicLink() || !stat.isFile() || !sameBigIntIdentity(stat, expected)) return;
+  try {
+    rmSync(path);
+  } catch {
+    // A failed cleanup must never fall back to deleting an unverified replacement.
+  }
+}
+
+function createV3TemporarySource(binding, value) {
+  verifyV3OutputParent(binding);
+  const path = resolve(
+    binding.parentAbsolute,
+    `.skill-lab-apply-${randomBytes(16).toString("hex")}`,
+  );
+  let descriptor;
+  let stat;
+  let failure;
+  try {
+    descriptor = openSync(
+      path,
+      fsConstants.O_WRONLY
+        | fsConstants.O_CREAT
+        | fsConstants.O_EXCL
+        | fsConstants.O_NOFOLLOW,
+      0o600,
+    );
+    stat = fstatSync(descriptor, { bigint: true });
+    if (!stat.isFile()) {
+      throw classifiedError(
+        "unsafe_path_or_integrity",
+        `${binding.label} temporary source is not a regular file`,
+      );
+    }
+    writeFileSync(descriptor, value);
+    const afterWrite = fstatSync(descriptor, { bigint: true });
+    if (!sameBigIntIdentity(stat, afterWrite)) {
+      throw classifiedError(
+        "unsafe_path_or_integrity",
+        `${binding.label} temporary source identity changed during write`,
+      );
+    }
+    stat = afterWrite;
+  } catch (error) {
+    failure = error;
+  } finally {
+    if (descriptor !== undefined) {
+      try {
+        closeSync(descriptor);
+      } catch {
+        // The path and pinned inode still determine whether cleanup is safe.
+      }
+    }
+  }
+  if (failure) {
+    if (stat) removePathIfOwned(path, stat);
+    if (failure instanceof CliError) throw failure;
+    try {
+      verifyV3OutputParent(binding);
+    } catch (drift) {
+      throw drift;
+    }
+    throw classifiedError(
+      "publication_failure",
+      `could not create ${binding.label} temporary source: ${failure.message}`,
+    );
+  }
+  const temporary = { path, stat };
+  try {
+    assertV3TempOwned(binding, temporary);
+  } catch (error) {
+    removePathIfOwned(path, stat);
+    throw error;
+  }
+  return temporary;
+}
+
+function publishV3Output(binding, temporary, state) {
+  assertV3OutputAbsent(binding);
+  assertV3TempOwned(binding, temporary);
+  try {
+    linkSync(temporary.path, binding.absolute);
+    state.published = true;
+  } catch (error) {
+    try {
+      verifyV3OutputParent(binding);
+    } catch (drift) {
+      throw drift;
+    }
+    throw classifiedError(
+      "publication_failure",
+      `could not publish ${binding.label}: ${error.message}`,
+    );
+  }
+  assertV3OutputOwned(binding, temporary);
+}
+
+function writeTwoOutputsV3(candidateBinding, candidate, reportBinding, report) {
+  let candidateTemporary;
+  let reportTemporary;
+  const candidateState = { published: false };
+  const reportState = { published: false };
+  try {
+    assertV3OutputAbsent(candidateBinding);
+    assertV3OutputAbsent(reportBinding);
+    candidateTemporary = createV3TemporarySource(candidateBinding, candidate);
+    reportTemporary = createV3TemporarySource(reportBinding, report);
+
+    publishV3Output(candidateBinding, candidateTemporary, candidateState);
+    assertV3OutputOwned(candidateBinding, candidateTemporary);
+    assertV3OutputAbsent(reportBinding);
+    publishV3Output(reportBinding, reportTemporary, reportState);
+    assertV3OutputOwned(candidateBinding, candidateTemporary);
+    assertV3OutputOwned(reportBinding, reportTemporary);
+  } catch (error) {
+    if (reportState.published && reportTemporary) {
+      removePathIfOwned(reportBinding.absolute, reportTemporary.stat);
+    }
+    if (candidateState.published && candidateTemporary) {
+      removePathIfOwned(candidateBinding.absolute, candidateTemporary.stat);
+    }
+    if (reportTemporary) removePathIfOwned(reportTemporary.path, reportTemporary.stat);
+    if (candidateTemporary) removePathIfOwned(candidateTemporary.path, candidateTemporary.stat);
+    if (error instanceof CliError) throw error;
+    throw classifiedError(
+      "publication_failure",
+      `could not publish apply artifacts: ${error.message}`,
+    );
+  }
+  removePathIfOwned(reportTemporary.path, reportTemporary.stat);
+  removePathIfOwned(candidateTemporary.path, candidateTemporary.stat);
 }
 
 function countExact(content, needle) {
@@ -1263,34 +1525,34 @@ function applyCommand(options) {
     "candidate",
     "report",
   ]);
-  const workspace = prepareWorkspace(paths["workspace-root"]);
-  assertExistingWithin(workspace.rootReal, paths.edits, "apply edits input");
-  const editsWasSymbolicLink = lstatSync(paths.edits).isSymbolicLink();
-  const initialEditsBuffer = readLimitedInput(
+  let workspace;
+  try {
+    workspace = prepareWorkspace(paths["workspace-root"]);
+  } catch (error) {
+    throw reclassify(error, "unsafe_path_or_integrity");
+  }
+  const initialStore = new ArtifactStore(workspace);
+  const initialEditsBuffer = initialStore.readAbsolute(
     paths.edits,
+    null,
     "edits document",
-    { allowSymbolicLinkPeek: true },
-  );
+  ).bytes;
   const initialPatchValue = parseJson(initialEditsBuffer, "edits document");
 
   if (initialPatchValue.schema === PATCH_SCHEMA_V3) {
     validatePatchV3(initialPatchValue);
-    try {
-      assertOutputWithin(workspace, paths.candidate, "candidate output");
-    } catch (error) {
-      const status = /already exists/.test(error.message)
-        ? "publication_failure"
-        : "unsafe_path_or_integrity";
-      throw reclassify(error, status);
-    }
-    try {
-      assertOutputWithin(workspace, paths.report, "apply report");
-    } catch (error) {
-      const status = /already exists/.test(error.message)
-        ? "publication_failure"
-        : "unsafe_path_or_integrity";
-      throw reclassify(error, status);
-    }
+    const candidateBinding = bindV3Output(
+      workspace,
+      paths.candidate,
+      [paths.source, paths.edits],
+      "candidate output",
+    );
+    const reportBinding = bindV3Output(
+      workspace,
+      paths.report,
+      [paths.source, paths.edits, paths.candidate],
+      "apply report",
+    );
 
     const store = new ArtifactStore(workspace);
     const patchArtifact = store.readAbsolute(
@@ -1317,20 +1579,15 @@ function applyCommand(options) {
       patchValue,
       store,
     );
-    writeTwoOutputs(
-      paths.candidate,
+    writeTwoOutputsV3(
+      candidateBinding,
       result.candidate,
-      paths.report,
+      reportBinding,
       canonicalJsonLine(result.report),
-      [paths.source, paths.edits],
-      "publication_failure",
     );
     return;
   }
 
-  if (editsWasSymbolicLink) {
-    throw new CliError(`edits document must be a physical regular file: ${paths.edits}`);
-  }
   assertExistingWithin(workspace.rootReal, paths.source, "apply input");
   assertOutputWithin(workspace, paths.candidate, "candidate output");
   assertOutputWithin(workspace, paths.report, "apply report");
@@ -1754,7 +2011,7 @@ function readWorkspaceArtifact(workspace, path, expectedSha, label) {
 class ArtifactStore {
   constructor(workspace) {
     this.workspace = workspace;
-    this.byRealPath = new Map();
+    this.byPhysicalKey = new Map();
     this.countedPhysicalArtifacts = new Set();
     this.campaignBytes = 0;
   }
@@ -1780,12 +2037,115 @@ class ArtifactStore {
     } catch (error) {
       throw reclassify(error, "unsafe_path_or_integrity");
     }
-    let current = this.workspace.rootAbsolute;
+    const beforeOpen = this.inspect(parts, path, label);
+    if (beforeOpen.stat.size > BigInt(MAX_INPUT_BYTES)) {
+      throw classifiedError(
+        "usage_or_schema",
+        `${label} exceeds the ${MAX_INPUT_BYTES}-byte (8 MiB) input limit`,
+      );
+    }
+
+    if (!Number.isInteger(fsConstants.O_NOFOLLOW)) {
+      throw classifiedError(
+        "unsupported_preflight",
+        "this runtime does not expose the required O_NOFOLLOW filesystem flag",
+      );
+    }
+
+    let descriptor;
+    try {
+      descriptor = openSync(
+        beforeOpen.absolute,
+        fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW,
+      );
+    } catch (error) {
+      throw classifiedError(
+        "unsafe_path_or_integrity",
+        `${label} could not be opened without following symbolic links: ${error.message}`,
+      );
+    }
+    try {
+      const openedStat = fstatSync(descriptor, { bigint: true });
+      const afterOpen = this.inspect(parts, path, label);
+      this.assertSameIdentity(openedStat, beforeOpen.stat, label, "changed before open");
+      this.assertSameIdentity(openedStat, afterOpen.stat, label, "changed during open");
+      if (!openedStat.isFile()) {
+        throw classifiedError(
+          "unsafe_path_or_integrity",
+          `${label} descriptor is not a physical regular file`,
+        );
+      }
+      if (openedStat.size > BigInt(MAX_INPUT_BYTES)) {
+        throw classifiedError(
+          "usage_or_schema",
+          `${label} exceeds the ${MAX_INPUT_BYTES}-byte (8 MiB) input limit`,
+        );
+      }
+
+      const expectedPhysicalKey = expectedSha
+        ? `${openedStat.dev}:${openedStat.ino}:${expectedSha}`
+        : null;
+      const cached = expectedPhysicalKey
+        ? this.byPhysicalKey.get(expectedPhysicalKey)
+        : null;
+      if (cached) {
+        this.count(cached, skill, label);
+        return cached;
+      }
+
+      const bytes = this.readBounded(descriptor, openedStat.size, label);
+      const afterReadStat = fstatSync(descriptor, { bigint: true });
+      const afterRead = this.inspect(parts, path, label);
+      this.assertSameIdentity(openedStat, afterReadStat, label, "descriptor identity changed");
+      this.assertSameIdentity(openedStat, afterRead.stat, label, "path changed during read");
+      if (afterReadStat.size > BigInt(MAX_INPUT_BYTES) || bytes.length > MAX_INPUT_BYTES) {
+        throw classifiedError(
+          "usage_or_schema",
+          `${label} exceeds the ${MAX_INPUT_BYTES}-byte (8 MiB) input limit`,
+        );
+      }
+
+      const digest = sha256(bytes);
+      if (expectedSha && digest !== expectedSha) {
+        throw classifiedError(
+          "unsafe_path_or_integrity",
+          `${label} sha256 mismatch: expected ${expectedSha}, got ${digest}`,
+        );
+      }
+      const physicalKey = `${afterReadStat.dev}:${afterReadStat.ino}:${digest}`;
+      const artifact = {
+        path,
+        absolute: afterRead.absolute,
+        real: afterRead.real,
+        bytes,
+        sha256: digest,
+        physicalKey,
+      };
+      this.byPhysicalKey.set(physicalKey, artifact);
+      this.count(artifact, skill, label);
+      return artifact;
+    } catch (error) {
+      if (error instanceof CliError) throw error;
+      throw classifiedError(
+        "unsafe_path_or_integrity",
+        `${label} descriptor read failed: ${error.message}`,
+      );
+    } finally {
+      try {
+        closeSync(descriptor);
+      } catch {
+        // The process is terminating or continuing with already-owned bytes; never reopen by path.
+      }
+    }
+  }
+
+  inspect(parts, path, label) {
+    let absolute = this.workspace.rootAbsolute;
     let stat;
     for (let index = 0; index < parts.length; index += 1) {
-      current = resolve(current, parts[index]);
+      absolute = resolve(absolute, parts[index]);
       try {
-        stat = lstatSync(current);
+        stat = lstatSync(absolute, { bigint: true });
       } catch {
         throw classifiedError(
           "unsafe_path_or_integrity",
@@ -1812,70 +2172,61 @@ class ArtifactStore {
       }
     }
 
-    const real = realpathSync(current);
+    let real;
+    try {
+      real = realpathSync(absolute);
+    } catch (error) {
+      throw classifiedError(
+        "unsafe_path_or_integrity",
+        `${label} could not be resolved physically: ${error.message}`,
+      );
+    }
     if (!isWithin(this.workspace.rootReal, real)) {
       throw classifiedError(
         "unsafe_path_or_integrity",
         `${label} resolves outside the workspace root`,
       );
     }
-    if (!Number.isSafeInteger(stat.size) || stat.size > MAX_INPUT_BYTES) {
+    return { absolute, real, stat };
+  }
+
+  assertSameIdentity(actual, expected, label, reason) {
+    if (!sameBigIntIdentity(actual, expected)) {
       throw classifiedError(
-        "usage_or_schema",
-        `${label} exceeds the ${MAX_INPUT_BYTES}-byte (8 MiB) input limit`,
+        "unsafe_path_or_integrity",
+        `${label} physical identity ${reason}`,
       );
     }
+  }
 
-    const cached = this.byRealPath.get(real);
-    if (cached) {
-      if (expectedSha && cached.sha256 !== expectedSha) {
+  readBounded(descriptor, initialSize, label) {
+    let capacity = Math.max(1, Number(initialSize) + 1);
+    let bytes = Buffer.allocUnsafe(capacity);
+    let length = 0;
+    while (length <= MAX_INPUT_BYTES) {
+      if (length === bytes.length) {
+        if (bytes.length === MAX_INPUT_BYTES + 1) break;
+        capacity = Math.min(
+          MAX_INPUT_BYTES + 1,
+          Math.max(bytes.length * 2, bytes.length + 64 * 1024),
+        );
+        const expanded = Buffer.allocUnsafe(capacity);
+        bytes.copy(expanded, 0, 0, length);
+        bytes = expanded;
+      }
+      let count;
+      try {
+        count = readSync(descriptor, bytes, length, bytes.length - length, length);
+      } catch (error) {
         throw classifiedError(
           "unsafe_path_or_integrity",
-          `${label} sha256 mismatch: expected ${expectedSha}, got ${cached.sha256}`,
+          `${label} could not be read through its bound descriptor: ${error.message}`,
         );
       }
-      this.count(cached, skill, label);
-      return cached;
+      if (count === 0) break;
+      length += count;
     }
-
-    let bytes;
-    try {
-      bytes = readFileSync(current);
-    } catch (error) {
-      throw classifiedError(
-        "unsafe_path_or_integrity",
-        `${label} could not be read: ${error.message}`,
-      );
-    }
-    if (bytes.length > MAX_INPUT_BYTES) {
-      throw classifiedError(
-        "usage_or_schema",
-        `${label} exceeds the ${MAX_INPUT_BYTES}-byte (8 MiB) input limit`,
-      );
-    }
-    const digest = sha256(bytes);
-    if (expectedSha && digest !== expectedSha) {
-      throw classifiedError(
-        "unsafe_path_or_integrity",
-        `${label} sha256 mismatch: expected ${expectedSha}, got ${digest}`,
-      );
-    }
-    const physicalKey = Number.isSafeInteger(stat.dev)
-        && Number.isSafeInteger(stat.ino)
-        && stat.ino !== 0
-      ? `${stat.dev}:${stat.ino}:${digest}`
-      : `${real}:${digest}`;
-    const artifact = {
-      path,
-      absolute: current,
-      real,
-      bytes,
-      sha256: digest,
-      physicalKey,
-    };
-    this.byRealPath.set(real, artifact);
-    this.count(artifact, skill, label);
-    return artifact;
+    return bytes.subarray(0, length);
   }
 
   count(artifact, skill, label) {

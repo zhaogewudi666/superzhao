@@ -197,6 +197,10 @@ export function schemaErrors(value, schema, root = schema, path = "$") {
   if (typeof value === "string") {
     if (schema.minLength !== undefined && value.length < schema.minLength) add("too short");
     if (schema.maxLength !== undefined && value.length > schema.maxLength) add("too long");
+    if (schema["x-maxUtf8Bytes"] !== undefined
+        && Buffer.byteLength(value, "utf8") > schema["x-maxUtf8Bytes"]) {
+      add(`exceeds ${schema["x-maxUtf8Bytes"]} UTF-8 bytes`);
+    }
     if (schema.pattern && !new RegExp(schema.pattern, "u").test(value)) add("pattern mismatch");
   }
   if (typeof value === "number") {

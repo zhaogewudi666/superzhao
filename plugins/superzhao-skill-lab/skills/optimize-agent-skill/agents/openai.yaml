@@ -1,0 +1,6 @@
+interface:
+  display_name: "Optimize Agent Skill"
+  short_description: "Gate existing Skill body candidates"
+  default_prompt: "Use $superzhao-skill-lab:optimize-agent-skill to evaluate a proposed Skill change without modifying the active Skill."
+policy:
+  allow_implicit_invocation: false

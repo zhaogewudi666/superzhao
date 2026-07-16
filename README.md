@@ -46,6 +46,28 @@ bash scripts/rollback-codex-profile.sh
 完整的安装、安全边界、上游同步和恢复说明见
 [Superzhao maintenance and installation](docs/superzhao-maintenance.md)。
 
+## 实验插件源码
+
+仓库还保留两个**不随 14-Skill 核心配置安装、也不在 repository marketplace
+列出**的实验插件源码：
+
+- `superzhao-skill-lab`：零运行时依赖的 existing-Skill body candidate 工具。
+  `apply` 限制操作数和 UTF-8 字节预算；`gate` 重新读取并绑定 source、candidate、
+  scenario、rubric、environment 与原始 evidence；`stage` 生成以
+  `manifest.json` 为完成标记的自包含审查包。文件哈希和 ID 约束不能证明 actor
+  独立性或人工评分真实性。OSL-v3 的首个有效候选样本遗漏了完整预算与部署边界，
+  因而未达到 5/5 门槛；保留版本是 explicit-only 实验源码。
+- `superzhao-engineering`：当前只含 explicit-only 的 `domain-modeling` 候选，
+  用于整理概念、不变量、状态、转移和阻塞业务决策。两轮 native implicit
+  campaign 都在首个有效重要样本失败，CLI 中的普通 `$name` 文本也没有证明
+  Skill load；因此它同样只保留为未来 UI 手动选择评估的源码。
+
+`.agents/plugins/marketplace.json` 仍只列出原有 `superpowers`。完整的 40/40 Matt
+Skill 对比、SkillOpt 机制取舍、严格重评分与原生行为证据见
+[source comparison](docs/superpowers/evals/2026-07-15-upstream-skill-integration-decisions.md)、
+[strict correction](docs/superpowers/evals/2026-07-15-upstream-skill-integration-review-correction.md)
+和 [Skill Lab native result](docs/superpowers/evals/2026-07-15-skill-lab-native-v3-results.md)。
+
 ## 仓库维护
 
 本仓库采用以下远端约定：

@@ -31,6 +31,17 @@ for required in \
   fi
 done
 
+if ! grep -Fq 'inventories are harness-specific' "$GUIDE"; then
+  printf 'FAIL: plugin development guide does not describe harness-specific marketplace inventories\n' >&2
+  exit 1
+fi
+
+if grep -Fq 'never advertise different plugin sets' "$GUIDE" ||
+  grep -Fq 'must be applied to both files consistently' "$GUIDE"; then
+  printf 'FAIL: plugin development guide incorrectly requires identical cross-harness inventories\n' >&2
+  exit 1
+fi
+
 find_yaml_python() {
   local candidate
 

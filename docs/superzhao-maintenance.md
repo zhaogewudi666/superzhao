@@ -67,7 +67,11 @@ bash tests/shell-lint/test-lint-shell.sh
 git diff --check upstream/main...HEAD
 ```
 
-Do not install or publish the update if a check fails. A passing suite is
+`run-tests.sh` runs every Bash contract and rehearsal test plus the Node test
+suites in `tests/codex-profile/`; Node.js must be available or the runner
+fails. For the complete deterministic sweep across the profile, plugins, and
+docs, run `bash tests/run-all.sh` (see `docs/testing.md`). Do not install or
+publish the update if a check fails. A passing suite is
 necessary evidence, but it does not replace manual review of the full diff.
 After review and approval, publish the update branch to the fork rather than
 to upstream:
@@ -111,6 +115,28 @@ to `${CODEX_HOME:-$HOME/.codex}/superzhao-last-backup`.
 
 Start a new Codex task after installation so skill discovery reloads the
 activated profile.
+
+## Verify an installed profile
+
+`scripts/profile-integrity.mjs` binds the managed skill set to content
+checksums. To confirm that an installed Codex home matches the current
+repository checkout exactly, generate a manifest from the checkout and verify
+the installed skills against it:
+
+```bash
+node scripts/profile-integrity.mjs manifest --root skills --output /tmp/profile-manifest.json
+node scripts/profile-integrity.mjs verify \
+  --root "${CODEX_HOME:-$HOME/.codex}/skills" \
+  --manifest /tmp/profile-manifest.json
+```
+
+A successful verification reports `"verified": true` with the profile's
+SHA-256. That hash identifies the exact profile content, so it can be compared
+against the profile hash recorded in behavior-evaluation reports under
+`docs/superpowers/evals/` to confirm the installed profile is the evaluated
+one. The managed skill list lives in `config/codex-profile-skills.txt` and
+must stay identical to the installer's `SKILLS` array;
+`tests/codex-profile/test-managed-set-sync.sh` enforces that.
 
 ## Roll back
 
@@ -192,3 +218,43 @@ cleaned before a later lock-release failure. Preserve and inspect every
 reported path that still exists. Do not treat another failure status as proof
 that no transaction remnants remain; review the diagnostics and configured
 `CODEX_HOME` before attempting manual repair or another profile operation.
+
+## Open recommendations (2026-07-16 review)
+
+Recorded from the fork review of the 14-Skill profile and the plugin-ecosystem
+work. Each item keeps its original recommendation even where a local change
+already implements part of it; publication of any of this work remains a
+separate, explicitly authorized action.
+
+1. **Bind publication evidence to the exact release candidate.** Before any
+   release or push claim, verify that `run-tests.sh` executes the Node suites
+   and `test-managed-set-sync.sh` guards installer/config drift in the exact
+   candidate SHA. Publication remains a separate action requiring an explicit
+   request and fresh evidence for that destination.
+2. **Decide the disposition of known inherited failures.** Root-caused
+   2026-07-16. Two suites were fixed in this repository and now gate
+   `tests/run-all.sh`: Codex plugin packaging (the script rejected linked
+   worktrees via a `-d .git` check and let `zip` store local-time DOS
+   timestamps; the test also assumed a western-hemisphere rendering of epoch
+   0) and OpenCode (the test install layout omitted the package-root
+   `package.json`, so Node parsed the ESM plugin as CommonJS). Two remain
+   open because fixing them edits `skills/using-superpowers/references/`,
+   which changes the managed profile SHA-256 and severs the accepted-eval
+   binding: the Pi suite needs Node ≥ 23.6 for TypeScript imports plus
+   `read`/`write`/`edit`/`bash` mappings absent from `pi-tools.md`, and the
+   Antigravity suite needs a `view_file` mapping absent from
+   `antigravity-tools.md`. Both reference files are also unreferenced by the
+   rewritten `using-superpowers` Skill and ship as dead weight in the
+   installed profile; fixing or removing them belongs to the same deliberate
+   profile-rebind decision.
+3. **Prevent coverage lists from drifting.** Implemented as
+   `bash tests/run-all.sh`, a curated aggregate runner that names every
+   skipped or excluded suite. The trade-off is a curated list rather than
+   auto-discovery: adding a suite means updating the runner and the
+   `docs/testing.md` table together.
+4. **Keep marketplace inventories harness-specific.** The repository carries
+   `.agents/plugins/marketplace.json` (Codex) and
+   `.claude-plugin/marketplace.json` (Claude Code) in different schemas. List
+   a plugin only where that harness has a valid package; synchronize shared
+   identity and metadata only when a plugin is genuinely distributed on both.
+   The exact rule is documented in `docs/plugin-development.md`.

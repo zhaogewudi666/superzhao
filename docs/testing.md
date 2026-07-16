@@ -6,7 +6,16 @@ integrated suites affected by the final diff.
 
 ## Deterministic repository tests
 
-The main entry points are:
+The aggregate entry point runs every currently passing deterministic suite and
+names anything it skips or excludes:
+
+```bash
+bash tests/run-all.sh
+```
+
+The per-area commands below remain the right tool while iterating on one area.
+Adding a suite means updating both this table and `tests/run-all.sh`; the
+runner's output lists its exclusions so the two cannot drift silently.
 
 | Area | Command |
 |---|---|
@@ -15,12 +24,33 @@ The main entry points are:
 | Codex fork sync | `bash tests/codex-plugin-sync/test-sync-to-codex-plugin.sh` |
 | Kimi plugin | `bash tests/kimi/run-tests.sh` |
 | OpenCode plugin | `bash tests/opencode/run-tests.sh` |
-| Pi extension | `node --test tests/pi/test-pi-extension.mjs` |
-| Brainstorm server | `npm test --prefix tests/brainstorm-server` |
+| Brainstorm server (run `npm ci --prefix tests/brainstorm-server` once first) | `npm test --prefix tests/brainstorm-server` |
 | Optional plugin layout and Skill contracts | `bash tests/optional-plugins/test-plugin-layout.sh`, `bash tests/optional-plugins/test-skill-lab-skill.sh`, and `bash tests/optional-plugins/test-engineering-skills.sh` |
-| Skill Lab CLI | `node --test tests/skill-lab/skill-lab.test.mjs` |
+| Skill Lab CLI | `node --test tests/skill-lab/*.test.mjs` |
 | Maintainer docs | `bash tests/docs/test-testing-guide.sh` and `bash tests/docs/test-plugin-development-guide.sh` |
 | Shell scripts | `bash tests/shell-lint/test-lint-shell.sh` |
+
+### Known inherited failures
+
+The following upstream-inherited suites fail for root causes established on
+2026-07-16. They are excluded from `tests/run-all.sh` so the aggregate gate
+stays meaningful, and they are retained here rather than deleted so the
+disposition stays a visible decision. (The Codex packaging and OpenCode suites
+previously listed here were root-caused to a worktree/timezone script bug and
+an unfaithful test install layout, fixed in this repository; both now gate the
+aggregate runner.)
+
+| Suite | Command | Root cause |
+|---|---|---|
+| Pi extension | `node --test tests/pi/test-pi-extension.mjs` | 4 of 6 tests `import()` the TypeScript extension and need a Node with default type stripping (≥ 23.6; 5 of 6 pass under Node 26). The last test requires `pi-tools.md` to document `read`/`write`/`edit`/`bash` tool mappings that the current upstream file does not contain. |
+| Antigravity mapping | `bash tests/antigravity/test-antigravity-tools.sh` | The test requires the mapping to document `view_file` as the file/skill-read tool; the upstream mapping file never mentions it. Superzhao's rewritten `using-superpowers` also no longer references the mapping file. |
+
+Both remaining fixes would edit files under
+`skills/using-superpowers/references/`, which changes the managed profile
+SHA-256 and severs the binding to the accepted behavior evaluations. Resolving
+them is therefore coupled to a deliberate profile rebind — or to dropping
+non-Codex harness support from the fork. Until decided, do not cite these
+suites as passing coverage.
 
 Some Claude Code integration and explicit-request tests launch real agent
 sessions and are slower or harness-specific. Read the scripts in

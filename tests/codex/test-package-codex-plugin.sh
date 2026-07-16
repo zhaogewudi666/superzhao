@@ -210,8 +210,10 @@ assert_equals "$tar_archive_paths" "$archive_paths" "zip and tar.gz archives con
 tar_task_brief_mode="$(tar -tzvf "$tar_archive" skills/subagent-driven-development/scripts/task-brief | awk '{print $1}')"
 assert_equals "$tar_task_brief_mode" "-rwxr-xr-x" "tar.gz archive preserves executable script mode"
 
-tar_metadata_times="$(tar -tzvf "$tar_archive" | awk '{print $6, $7, $8}' | sort -u)"
-assert_equals "$tar_metadata_times" "Dec 31 1969" "tar.gz archive normalizes entry timestamps"
+# tar stores epoch mtimes; -tv renders them in local time, so pin the
+# rendering to UTC instead of assuming a western-hemisphere timezone.
+tar_metadata_times="$(TZ=UTC tar -tzvf "$tar_archive" | awk '{print $6, $7, $8}' | sort -u)"
+assert_equals "$tar_metadata_times" "Jan 1 1970" "tar.gz archive normalizes entry timestamps"
 
 metadata_archive="$TEST_ROOT/metadata-source.tar.gz"
 metadata_zip="$TEST_ROOT/metadata-source.zip"

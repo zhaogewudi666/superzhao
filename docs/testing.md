@@ -6,21 +6,46 @@ integrated suites affected by the final diff.
 
 ## Deterministic repository tests
 
-The main entry points are:
+The aggregate entry point runs every currently passing deterministic suite and
+names anything it skips or excludes:
+
+```bash
+bash tests/run-all.sh
+```
+
+The per-area commands below remain the right tool while iterating on one area.
+Adding a suite means updating both this table and `tests/run-all.sh`; the
+runner's output lists its exclusions so the two cannot drift silently.
 
 | Area | Command |
 |---|---|
 | Managed Codex profile, routing contracts, installer/rollback, integrity | `bash tests/codex-profile/run-tests.sh` |
-| Codex plugin manifest and packaging | `bash tests/codex/test-marketplace-manifest.sh` and `bash tests/codex/test-package-codex-plugin.sh` |
+| Codex plugin manifest | `bash tests/codex/test-marketplace-manifest.sh` |
 | Codex fork sync | `bash tests/codex-plugin-sync/test-sync-to-codex-plugin.sh` |
 | Kimi plugin | `bash tests/kimi/run-tests.sh` |
-| OpenCode plugin | `bash tests/opencode/run-tests.sh` |
-| Pi extension | `node --test tests/pi/test-pi-extension.mjs` |
-| Brainstorm server | `npm test --prefix tests/brainstorm-server` |
+| Brainstorm server (run `npm ci --prefix tests/brainstorm-server` once first) | `npm test --prefix tests/brainstorm-server` |
 | Optional plugin layout and Skill contracts | `bash tests/optional-plugins/test-plugin-layout.sh`, `bash tests/optional-plugins/test-skill-lab-skill.sh`, and `bash tests/optional-plugins/test-engineering-skills.sh` |
 | Skill Lab CLI | `node --test tests/skill-lab/skill-lab.test.mjs` |
 | Maintainer docs | `bash tests/docs/test-testing-guide.sh` and `bash tests/docs/test-plugin-development-guide.sh` |
 | Shell scripts | `bash tests/shell-lint/test-lint-shell.sh` |
+
+### Known inherited failures
+
+The following suites fail identically on pristine upstream superpowers v6.1.1
+(`d884ae0`), verified 2026-07-16 in the same environment. They are excluded
+from `tests/run-all.sh` so the aggregate gate stays meaningful, and they are
+retained here rather than deleted so the disposition stays a visible decision:
+
+| Suite | Command | Observed failure |
+|---|---|---|
+| Pi extension | `node --test tests/pi/test-pi-extension.mjs` | 5 of 6 tests fail (lifecycle hooks, resource discovery, bootstrap injection, tool mapping) |
+| Antigravity mapping | `bash tests/antigravity/test-antigravity-tools.sh` | mapping does not document `view_file`; Superzhao's rewritten `using-superpowers` also no longer references the mapping file |
+| Codex plugin packaging | `bash tests/codex/test-package-codex-plugin.sh` | packaging reports and archive not produced where the test expects them |
+| OpenCode plugin | `bash tests/opencode/run-tests.sh` | 2 non-integration tests fail |
+
+Open disposition (owner: maintainer): fix each suite, drop non-Codex harness
+support from the fork, or keep them annotated here. Until decided, do not cite
+these suites as passing coverage.
 
 Some Claude Code integration and explicit-request tests launch real agent
 sessions and are slower or harness-specific. Read the scripts in

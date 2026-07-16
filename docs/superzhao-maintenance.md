@@ -69,7 +69,9 @@ git diff --check upstream/main...HEAD
 
 `run-tests.sh` runs every Bash contract and rehearsal test plus the Node test
 suites in `tests/codex-profile/`; Node.js must be available or the runner
-fails. Do not install or publish the update if a check fails. A passing suite is
+fails. For the complete deterministic sweep across the profile, plugins, and
+docs, run `bash tests/run-all.sh` (see `docs/testing.md`). Do not install or
+publish the update if a check fails. A passing suite is
 necessary evidence, but it does not replace manual review of the full diff.
 After review and approval, publish the update branch to the fork rather than
 to upstream:
@@ -216,3 +218,38 @@ cleaned before a later lock-release failure. Preserve and inspect every
 reported path that still exists. Do not treat another failure status as proof
 that no transaction remnants remain; review the diagnostics and configured
 `CODEX_HOME` before attempting manual repair or another profile operation.
+
+## Open recommendations (2026-07-16 review)
+
+Recorded from the fork review of the 14-Skill profile and the plugin-ecosystem
+work. Each item keeps its original recommendation even where a local change
+already implements part of it; publication of any of this work remains a
+separate, explicitly authorized action.
+
+1. **Publish the local validation and review commits.** The local review
+   branch holds the validation-wiring fix (`run-tests.sh` executes the Node
+   suites; `test-managed-set-sync.sh` guards installer/config drift), the
+   merge of the plugin-ecosystem work, and this review's changes. Until they
+   are pushed, the remote `main`'s `tests/codex-profile/run-tests.sh` still
+   skips the Node suites, so the remote testing table overstates its
+   coverage. Deliberately not pushed at the user's direction; pushing is the
+   user's decision and action.
+2. **Decide the disposition of known inherited failures.** The Pi extension,
+   Antigravity mapping, Codex plugin packaging, and OpenCode suites fail
+   identically on pristine upstream superpowers v6.1.1 (`d884ae0`; verified
+   2026-07-16). The annotation option is implemented in `docs/testing.md`;
+   fixing them or dropping non-Codex harness support from the fork remain the
+   other options. Related: `skills/using-superpowers/references/pi-tools.md`
+   and `antigravity-tools.md` are no longer referenced by the rewritten
+   `using-superpowers` Skill and ship as dead weight in the installed profile;
+   their removal is part of the same decision.
+3. **Prevent coverage lists from drifting.** Implemented as
+   `bash tests/run-all.sh`, a curated aggregate runner that names every
+   skipped or excluded suite. The trade-off is a curated list rather than
+   auto-discovery: adding a suite means updating the runner and the
+   `docs/testing.md` table together.
+4. **Keep the two marketplace manifests consistent.** The repository carries
+   `.agents/plugins/marketplace.json` (Codex) and
+   `.claude-plugin/marketplace.json` (Claude Code) in different schemas; both
+   currently list only `superpowers`. Documented in
+   `docs/plugin-development.md`; any listing decision must change both files.

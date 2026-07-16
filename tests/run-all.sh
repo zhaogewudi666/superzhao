@@ -54,6 +54,10 @@ run_required "skill lab skill contract" \
   bash tests/optional-plugins/test-skill-lab-skill.sh
 run_required "engineering skill contract" \
   bash tests/optional-plugins/test-engineering-skills.sh
+run_required "session-start hook" \
+  bash tests/hooks/test-session-start.sh
+run_required "sdd workspace" \
+  bash tests/claude-code/test-sdd-workspace.sh
 if (( ${#skill_lab_tests[@]} == 0 )); then
   printf 'FAIL: skill lab CLI (no tests/skill-lab/*.test.mjs suites found)\n' >&2
   failures=$((failures + 1))
@@ -76,6 +80,8 @@ else
 fi
 
 printf 'NOT RUN (known inherited failures; see docs/testing.md): tests/pi, tests/antigravity\n'
+printf 'NOT RUN (known local contract mismatch; see docs/testing.md): tests/claude-code/test-worktree-path-policy.sh\n'
+printf 'NOT RUN (slow platform lifecycle; see docs/testing.md): tests/brainstorm-server/windows-lifecycle.test.sh\n'
 
 if (( failures > 0 )); then
   printf '%d aggregate suite(s) failed\n' "$failures" >&2

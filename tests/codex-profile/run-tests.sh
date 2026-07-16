@@ -14,5 +14,5 @@ if (( ${#mjs_tests[@]} > 0 )); then
       "${#mjs_tests[@]}" "$SCRIPT_DIR" >&2
     exit 1
   fi
-  node --test "${mjs_tests[@]}"
+  node --test --test-concurrency=1 "${mjs_tests[@]}"
 fi

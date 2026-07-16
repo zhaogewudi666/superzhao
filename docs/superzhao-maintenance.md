@@ -246,12 +246,20 @@ separate, explicitly authorized action.
    `antigravity-tools.md`. Both reference files are also unreferenced by the
    rewritten `using-superpowers` Skill and ship as dead weight in the
    installed profile; fixing or removing them belongs to the same deliberate
-   profile-rebind decision.
+   profile-rebind decision. A separate local worktree path-policy contract is
+   also open: it requires an exact older `.worktrees/` default sentence while
+   the accepted Skill prefers host-native isolation and only then a manual
+   project-local convention. Updating or retiring that stale test does not
+   change the profile digest; changing the Skill does require fresh evaluation
+   and a rebind. The aggregate runner now names this mismatch rather than
+   silently omitting it.
 3. **Prevent coverage lists from drifting.** Implemented as
    `bash tests/run-all.sh`, a curated aggregate runner that names every
    skipped or excluded suite. The trade-off is a curated list rather than
    auto-discovery: adding a suite means updating the runner and the
-   `docs/testing.md` table together.
+   `docs/testing.md` table together. The deterministic SDD workspace suite now
+   gates the runner; the roughly 150-second Windows lifecycle suite is named as
+   a slow explicit exclusion.
 4. **Keep marketplace inventories harness-specific.** The repository carries
    `.agents/plugins/marketplace.json` (Codex) and
    `.claude-plugin/marketplace.json` (Claude Code) in different schemas. List

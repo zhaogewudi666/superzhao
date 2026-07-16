@@ -355,7 +355,11 @@ test('managed symlinks, unsafe names, and unsupported entries fail closed', asyn
     try {
       await writeFile(encodedPath, 'invalid name\n');
     } catch (error) {
-      if (error.code === 'EILSEQ' || error.code === 'EINVAL') {
+      if (
+        error.code === 'EILSEQ' ||
+        error.code === 'EINVAL' ||
+        error.code === 'EPERM'
+      ) {
         subtest.skip('filesystem rejects invalid UTF-8 filenames');
         return;
       }

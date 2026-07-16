@@ -226,14 +226,11 @@ work. Each item keeps its original recommendation even where a local change
 already implements part of it; publication of any of this work remains a
 separate, explicitly authorized action.
 
-1. **Publish the local validation and review commits.** The local review
-   branch holds the validation-wiring fix (`run-tests.sh` executes the Node
-   suites; `test-managed-set-sync.sh` guards installer/config drift), the
-   merge of the plugin-ecosystem work, and this review's changes. Until they
-   are pushed, the remote `main`'s `tests/codex-profile/run-tests.sh` still
-   skips the Node suites, so the remote testing table overstates its
-   coverage. Deliberately not pushed at the user's direction; pushing is the
-   user's decision and action.
+1. **Bind publication evidence to the exact release candidate.** Before any
+   release or push claim, verify that `run-tests.sh` executes the Node suites
+   and `test-managed-set-sync.sh` guards installer/config drift in the exact
+   candidate SHA. Publication remains a separate action requiring an explicit
+   request and fresh evidence for that destination.
 2. **Decide the disposition of known inherited failures.** The Pi extension,
    Antigravity mapping, Codex plugin packaging, and OpenCode suites fail
    identically on pristine upstream superpowers v6.1.1 (`d884ae0`; verified
@@ -248,8 +245,9 @@ separate, explicitly authorized action.
    skipped or excluded suite. The trade-off is a curated list rather than
    auto-discovery: adding a suite means updating the runner and the
    `docs/testing.md` table together.
-4. **Keep the two marketplace manifests consistent.** The repository carries
+4. **Keep marketplace inventories harness-specific.** The repository carries
    `.agents/plugins/marketplace.json` (Codex) and
-   `.claude-plugin/marketplace.json` (Claude Code) in different schemas; both
-   currently list only `superpowers`. Documented in
-   `docs/plugin-development.md`; any listing decision must change both files.
+   `.claude-plugin/marketplace.json` (Claude Code) in different schemas. List
+   a plugin only where that harness has a valid package; synchronize shared
+   identity and metadata only when a plugin is genuinely distributed on both.
+   The exact rule is documented in `docs/plugin-development.md`.

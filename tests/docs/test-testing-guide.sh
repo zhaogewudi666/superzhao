@@ -19,14 +19,22 @@ require_text 'tests/docs/test-testing-guide\.sh' \
   'testing guide documents its own contract test'
 require_text 'tests/optional-plugins/test-plugin-layout\.sh' \
   'testing guide documents optional plugin validation'
-require_text 'tests/skill-lab/skill-lab\.test\.mjs' \
-  'testing guide documents the Skill Lab CLI suite'
+require_text 'tests/skill-lab/\*\.test\.mjs' \
+  'testing guide documents all Skill Lab CLI suites'
 require_text 'tests/shell-lint/test-lint-shell\.sh' \
   'testing guide documents the shell lint suite entry point'
 require_text 'docs/superpowers/evals/' \
   'testing guide identifies committed behavior evidence'
 require_text 'evals/' \
   'testing guide identifies the external behavior harness checkout'
+
+if ! grep -Fq 'skill_lab_tests=("$ROOT"/tests/skill-lab/*.test.mjs)' \
+  "$ROOT/tests/run-all.sh" ||
+  ! grep -Fq 'node --test "${skill_lab_tests[@]}"' \
+    "$ROOT/tests/run-all.sh"; then
+  printf 'FAIL: aggregate runner does not discover every Skill Lab Node suite\n' >&2
+  failures=$((failures + 1))
+fi
 
 if (( failures > 0 )); then
   exit 1

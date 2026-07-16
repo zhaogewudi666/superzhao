@@ -25,7 +25,7 @@ runner's output lists its exclusions so the two cannot drift silently.
 | Kimi plugin | `bash tests/kimi/run-tests.sh` |
 | Brainstorm server (run `npm ci --prefix tests/brainstorm-server` once first) | `npm test --prefix tests/brainstorm-server` |
 | Optional plugin layout and Skill contracts | `bash tests/optional-plugins/test-plugin-layout.sh`, `bash tests/optional-plugins/test-skill-lab-skill.sh`, and `bash tests/optional-plugins/test-engineering-skills.sh` |
-| Skill Lab CLI | `node --test tests/skill-lab/skill-lab.test.mjs` |
+| Skill Lab CLI | `node --test tests/skill-lab/*.test.mjs` |
 | Maintainer docs | `bash tests/docs/test-testing-guide.sh` and `bash tests/docs/test-plugin-development-guide.sh` |
 | Shell scripts | `bash tests/shell-lint/test-lint-shell.sh` |
 

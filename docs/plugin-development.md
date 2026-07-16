@@ -57,9 +57,12 @@ silently install the plugin into a developer's personal Codex home.
 
 The repository carries two marketplace manifests in different schemas:
 `.agents/plugins/marketplace.json` for Codex and
-`.claude-plugin/marketplace.json` for Claude Code. A decision to list or
-unlist a plugin must be applied to both files consistently so the harnesses
-never advertise different plugin sets.
+`.claude-plugin/marketplace.json` for Claude Code. Their marketplace
+inventories are harness-specific: list a plugin only where that harness has a
+valid package to install. When a plugin is genuinely distributed on both
+harnesses, keep its shared identity and metadata consistent, but do not add a
+placeholder entry to an unsupported harness. A Codex-only listing changes
+`.agents/plugins/marketplace.json` alone.
 
 Keep each plugin independently valid. Do not point several plugin entries at
 one shared skill tree, use symlinks, or rely on files outside that plugin root.

@@ -20,6 +20,10 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 failures=0
 
+shopt -s nullglob
+skill_lab_tests=("$ROOT"/tests/skill-lab/*.test.mjs)
+shopt -u nullglob
+
 run_required() {
   local label="$1"
   shift
@@ -46,8 +50,13 @@ run_required "skill lab skill contract" \
   bash tests/optional-plugins/test-skill-lab-skill.sh
 run_required "engineering skill contract" \
   bash tests/optional-plugins/test-engineering-skills.sh
-run_required "skill lab CLI" \
-  node --test tests/skill-lab/skill-lab.test.mjs
+if (( ${#skill_lab_tests[@]} == 0 )); then
+  printf 'FAIL: skill lab CLI (no tests/skill-lab/*.test.mjs suites found)\n' >&2
+  failures=$((failures + 1))
+else
+  run_required "skill lab CLI" \
+    node --test "${skill_lab_tests[@]}"
+fi
 run_required "testing guide contract" \
   bash tests/docs/test-testing-guide.sh
 run_required "plugin development guide contract" \

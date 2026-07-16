@@ -40,10 +40,14 @@ run_required "codex profile (contracts, installer/rollback, integrity)" \
   bash tests/codex-profile/run-tests.sh
 run_required "codex marketplace manifest" \
   bash tests/codex/test-marketplace-manifest.sh
+run_required "codex plugin packaging" \
+  bash tests/codex/test-package-codex-plugin.sh
 run_required "codex plugin sync" \
   bash tests/codex-plugin-sync/test-sync-to-codex-plugin.sh
 run_required "kimi plugin" \
   bash tests/kimi/run-tests.sh
+run_required "opencode plugin" \
+  bash tests/opencode/run-tests.sh
 run_required "optional plugin layout" \
   bash tests/optional-plugins/test-plugin-layout.sh
 run_required "skill lab skill contract" \
@@ -71,7 +75,7 @@ else
   printf 'SKIPPED: brainstorm server (dependencies not installed; run: npm ci --prefix tests/brainstorm-server)\n'
 fi
 
-printf 'NOT RUN (known inherited failures; see docs/testing.md): tests/pi, tests/antigravity, tests/codex/test-package-codex-plugin.sh, tests/opencode\n'
+printf 'NOT RUN (known inherited failures; see docs/testing.md): tests/pi, tests/antigravity\n'
 
 if (( failures > 0 )); then
   printf '%d aggregate suite(s) failed\n' "$failures" >&2

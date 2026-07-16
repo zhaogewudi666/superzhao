@@ -27,6 +27,11 @@ SUPERPOWERS_PLUGIN_FILE="$SUPERPOWERS_DIR/.opencode/plugins/superpowers.js"
 mkdir -p "$SUPERPOWERS_DIR"
 cp -r "$REPO_ROOT/skills" "$SUPERPOWERS_DIR/"
 
+# Real installs pull the whole package via OpenCode's plugin manager, so the
+# repo package.json ("type": "module") sits at the package root. Without it,
+# node parses the ESM plugin file as CommonJS and rejects its import syntax.
+cp "$REPO_ROOT/package.json" "$SUPERPOWERS_DIR/package.json"
+
 # Install plugin
 mkdir -p "$(dirname "$SUPERPOWERS_PLUGIN_FILE")"
 cp "$REPO_ROOT/.opencode/plugins/superpowers.js" "$SUPERPOWERS_PLUGIN_FILE"

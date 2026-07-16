@@ -20,9 +20,10 @@ runner's output lists its exclusions so the two cannot drift silently.
 | Area | Command |
 |---|---|
 | Managed Codex profile, routing contracts, installer/rollback, integrity | `bash tests/codex-profile/run-tests.sh` |
-| Codex plugin manifest | `bash tests/codex/test-marketplace-manifest.sh` |
+| Codex plugin manifest and packaging | `bash tests/codex/test-marketplace-manifest.sh` and `bash tests/codex/test-package-codex-plugin.sh` |
 | Codex fork sync | `bash tests/codex-plugin-sync/test-sync-to-codex-plugin.sh` |
 | Kimi plugin | `bash tests/kimi/run-tests.sh` |
+| OpenCode plugin | `bash tests/opencode/run-tests.sh` |
 | Brainstorm server (run `npm ci --prefix tests/brainstorm-server` once first) | `npm test --prefix tests/brainstorm-server` |
 | Optional plugin layout and Skill contracts | `bash tests/optional-plugins/test-plugin-layout.sh`, `bash tests/optional-plugins/test-skill-lab-skill.sh`, and `bash tests/optional-plugins/test-engineering-skills.sh` |
 | Skill Lab CLI | `node --test tests/skill-lab/*.test.mjs` |
@@ -31,21 +32,25 @@ runner's output lists its exclusions so the two cannot drift silently.
 
 ### Known inherited failures
 
-The following suites fail identically on pristine upstream superpowers v6.1.1
-(`d884ae0`), verified 2026-07-16 in the same environment. They are excluded
-from `tests/run-all.sh` so the aggregate gate stays meaningful, and they are
-retained here rather than deleted so the disposition stays a visible decision:
+The following upstream-inherited suites fail for root causes established on
+2026-07-16. They are excluded from `tests/run-all.sh` so the aggregate gate
+stays meaningful, and they are retained here rather than deleted so the
+disposition stays a visible decision. (The Codex packaging and OpenCode suites
+previously listed here were root-caused to a worktree/timezone script bug and
+an unfaithful test install layout, fixed in this repository; both now gate the
+aggregate runner.)
 
-| Suite | Command | Observed failure |
+| Suite | Command | Root cause |
 |---|---|---|
-| Pi extension | `node --test tests/pi/test-pi-extension.mjs` | 5 of 6 tests fail (lifecycle hooks, resource discovery, bootstrap injection, tool mapping) |
-| Antigravity mapping | `bash tests/antigravity/test-antigravity-tools.sh` | mapping does not document `view_file`; Superzhao's rewritten `using-superpowers` also no longer references the mapping file |
-| Codex plugin packaging | `bash tests/codex/test-package-codex-plugin.sh` | packaging reports and archive not produced where the test expects them |
-| OpenCode plugin | `bash tests/opencode/run-tests.sh` | 2 non-integration tests fail |
+| Pi extension | `node --test tests/pi/test-pi-extension.mjs` | 4 of 6 tests `import()` the TypeScript extension and need a Node with default type stripping (≥ 23.6; 5 of 6 pass under Node 26). The last test requires `pi-tools.md` to document `read`/`write`/`edit`/`bash` tool mappings that the current upstream file does not contain. |
+| Antigravity mapping | `bash tests/antigravity/test-antigravity-tools.sh` | The test requires the mapping to document `view_file` as the file/skill-read tool; the upstream mapping file never mentions it. Superzhao's rewritten `using-superpowers` also no longer references the mapping file. |
 
-Open disposition (owner: maintainer): fix each suite, drop non-Codex harness
-support from the fork, or keep them annotated here. Until decided, do not cite
-these suites as passing coverage.
+Both remaining fixes would edit files under
+`skills/using-superpowers/references/`, which changes the managed profile
+SHA-256 and severs the binding to the accepted behavior evaluations. Resolving
+them is therefore coupled to a deliberate profile rebind — or to dropping
+non-Codex harness support from the fork. Until decided, do not cite these
+suites as passing coverage.
 
 Some Claude Code integration and explicit-request tests launch real agent
 sessions and are slower or harness-specific. Read the scripts in

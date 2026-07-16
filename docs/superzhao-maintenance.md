@@ -231,15 +231,22 @@ separate, explicitly authorized action.
    and `test-managed-set-sync.sh` guards installer/config drift in the exact
    candidate SHA. Publication remains a separate action requiring an explicit
    request and fresh evidence for that destination.
-2. **Decide the disposition of known inherited failures.** The Pi extension,
-   Antigravity mapping, Codex plugin packaging, and OpenCode suites fail
-   identically on pristine upstream superpowers v6.1.1 (`d884ae0`; verified
-   2026-07-16). The annotation option is implemented in `docs/testing.md`;
-   fixing them or dropping non-Codex harness support from the fork remain the
-   other options. Related: `skills/using-superpowers/references/pi-tools.md`
-   and `antigravity-tools.md` are no longer referenced by the rewritten
-   `using-superpowers` Skill and ship as dead weight in the installed profile;
-   their removal is part of the same decision.
+2. **Decide the disposition of known inherited failures.** Root-caused
+   2026-07-16. Two suites were fixed in this repository and now gate
+   `tests/run-all.sh`: Codex plugin packaging (the script rejected linked
+   worktrees via a `-d .git` check and let `zip` store local-time DOS
+   timestamps; the test also assumed a western-hemisphere rendering of epoch
+   0) and OpenCode (the test install layout omitted the package-root
+   `package.json`, so Node parsed the ESM plugin as CommonJS). Two remain
+   open because fixing them edits `skills/using-superpowers/references/`,
+   which changes the managed profile SHA-256 and severs the accepted-eval
+   binding: the Pi suite needs Node ≥ 23.6 for TypeScript imports plus
+   `read`/`write`/`edit`/`bash` mappings absent from `pi-tools.md`, and the
+   Antigravity suite needs a `view_file` mapping absent from
+   `antigravity-tools.md`. Both reference files are also unreferenced by the
+   rewritten `using-superpowers` Skill and ship as dead weight in the
+   installed profile; fixing or removing them belongs to the same deliberate
+   profile-rebind decision.
 3. **Prevent coverage lists from drifting.** Implemented as
    `bash tests/run-all.sh`, a curated aggregate runner that names every
    skipped or excluded suite. The trade-off is a curated list rather than

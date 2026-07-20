@@ -80,9 +80,10 @@ node "$SKILL_LAB_CLI" doctor \
   --output-parent "$PWD/.skill-lab/example/published"
 ```
 
-`doctor` checks the supported Node runtime, workspace containment, ownership,
-private mode, same-device publication, and hard-link support. It does not
-modify campaign artifacts.
+`doctor` checks the supported Node runtime, workspace containment, private
+mode, same-device publication, and hard-link support. The later `stage`
+preflight also enforces output-parent ownership. `doctor` does not modify
+campaign artifacts.
 
 ## 1. Bind and apply a body patch
 
@@ -176,12 +177,17 @@ scorer output by raw-byte digest.
 Retain invalid and indeterminate attempts with a reason and no outcome. A valid
 row has outcome `pass` or `fail`; a valid failure requires a stable failure
 code. Every selection and test case/arm has exactly `required_valid` valid
-rows. Extra valid rows are rejected, not silently discarded.
+rows and no more than `required_valid` invalid or indeterminate attempts.
+The campaign-wide limit of 1,000 attempted rows includes valid, invalid, and
+indeterminate rows. Extra valid rows or excess retained attempts reject the
+campaign; do not hide or discard rows to force acceptance.
 
-Run, actor-instance, transcript, scorer-run, and scorer-output identities are
-not reused across arms or splits. Matching current/candidate cases use the same
-actor and scorer profile digests. Hashes prove byte identity; they do not prove
-that identities are independent or scores are truthful.
+Sample, run, actor-instance, scorer-run, transcript, and scorer-output
+identities are globally unique across all attempted samples, including attempts
+inside the same split and arm. Actor and scorer profile identities may repeat;
+matching current/candidate cases use the same profile-digest multisets. Hashes
+prove byte identity; they do not prove that identities are independent or
+scores are truthful.
 
 ## 3. Gate selection and held-out evidence
 
@@ -265,15 +271,20 @@ unsafe path or integrity failure; `4` selection rejection; `5` held-out
 final rejection; `6` output conflict or filesystem publication failure; and
 `7` unsupported runtime or filesystem preflight.
 
-For every accepted or rejected proposal, hand off:
+For every proposal, hand off:
 
-- source, patch, candidate, cases, samples, reports, manifest, and producer
-  digests;
+- source, patch, candidate, cases, samples, and available report digests;
 - the complete candidate diff and operation/byte budgets;
 - the full campaign artifact location and held-out result;
 - human-attested actor, scorer, coverage, and independence limitations;
 - the relationship to every prior rejection; and
 - any orphan or incomplete path requiring a user decision.
+
+For an accepted and staged proposal, additionally hand off the manifest,
+packaged producer digest, complete bundle location, and successful
+`verify-bundle` result. Rejected proposals have no valid bundle manifest:
+hand off the rejection report and state that staging and bundle verification
+did not occur.
 
 No `apply`, `gate`, `stage`, or `verify-bundle` success authorizes
 replacing the source, changing an active profile, installing a plugin,

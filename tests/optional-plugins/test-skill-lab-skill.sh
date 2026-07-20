@@ -59,7 +59,11 @@ for required in \
   'superzhao.skill-lab.patch/v3' \
   'superzhao.skill-lab.cases/v3' \
   'superzhao.skill-lab.samples/v3' \
-  'superzhao.skill-lab.bundle-manifest/v3'; do
+  'superzhao.skill-lab.bundle-manifest/v3' \
+  'no more than `required_valid` invalid or indeterminate attempts' \
+  'campaign-wide limit of 1,000 attempted rows' \
+  'globally unique across all attempted samples' \
+  'Rejected proposals have no valid bundle manifest'; do
   if ! grep -Fq "$required" "$REFERENCE"; then
     printf 'FAIL: campaign reference is not bound to the production v3 contract: %s\n' "$required" >&2
     exit 1
@@ -70,7 +74,8 @@ for stale in \
   '# Skill Lab v2 campaign format' \
   '"schema_version": 2' \
   'All JSON schemas below are version 2' \
-  'cannot affect the decision'; do
+  'cannot affect the decision' \
+  'containment, ownership,'; do
   if grep -Fqi "$stale" "$REFERENCE"; then
     printf 'FAIL: campaign reference retains an incompatible v2 contract: %s\n' "$stale" >&2
     exit 1

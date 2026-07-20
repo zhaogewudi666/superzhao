@@ -256,6 +256,21 @@ test("gate report cannot claim final acceptance after selection rejection", () =
   );
 });
 
+test("gate rejection counters can honestly represent every row in the 1000-row ledger", () => {
+  const { schema, example } = readSchemaPair("gate-report");
+  assert.equal(schema.$defs.stats.properties.valid.maximum, 1000);
+  assert.equal(schema.$defs.failureCount.properties.count.minimum, 2);
+  assert.equal(schema.$defs.failureCount.properties.count.maximum, 1000);
+  assert.equal(schema.$defs.caseResult.properties.repeated_current_failure_codes.maxItems, 500);
+
+  const oneOff = clone(example);
+  oneOff.selection.cases[0].repeated_current_failure_codes = [{
+    failure_code: "ONE_OFF",
+    count: 1,
+  }];
+  assertInvalid(oneOff, schema, "one failure is not a repeated failure");
+});
+
 test("bundle manifest does not confuse the 1000-row sample cap with a file cap", () => {
   const { schema, example } = readSchemaPair("bundle-manifest");
   const expanded = clone(example);

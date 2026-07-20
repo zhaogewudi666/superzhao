@@ -1,0 +1,35 @@
+{
+  "schema": "superzhao.skill-lab.test-blueprint/v1",
+  "campaign_id": "production-gate-fixture-v3",
+  "required_valid": 5,
+  "cases": [
+    {
+      "case_id": "selection-important",
+      "split": "selection",
+      "case_type": "important",
+      "current": ["KNOWN_GAP", "KNOWN_GAP", "pass", "pass", "pass"],
+      "candidate": ["pass", "pass", "pass", "pass", "pass"]
+    },
+    {
+      "case_id": "selection-control",
+      "split": "selection",
+      "case_type": "control",
+      "current": ["CONTROL_VARIANCE", "pass", "pass", "pass", "pass"],
+      "candidate": ["CONTROL_VARIANCE", "pass", "pass", "pass", "pass"]
+    },
+    {
+      "case_id": "test-important",
+      "split": "test",
+      "case_type": "important",
+      "current": ["HELDOUT_GAP", "pass", "pass", "pass", "pass"],
+      "candidate": ["pass", "pass", "pass", "pass", "pass"]
+    },
+    {
+      "case_id": "test-control",
+      "split": "test",
+      "case_type": "control",
+      "current": ["CONTROL_VARIANCE", "pass", "pass", "pass", "pass"],
+      "candidate": ["CONTROL_VARIANCE", "pass", "pass", "pass", "pass"]
+    }
+  ]
+}

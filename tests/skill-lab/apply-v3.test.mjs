@@ -74,6 +74,27 @@ function basePatch(fixture, overrides = {}) {
   };
 }
 
+function supportedEdit(editId, op, target, content) {
+  return {
+    edit_id: editId,
+    op,
+    target,
+    content,
+    rationale: `Exercise the bounded ${op} behavior.`,
+    supporting_case_ids: ["selection-important-1"],
+    support_count: 1,
+    source_types: ["failure"],
+  };
+}
+
+function patchWithEdits(fixture, edits, overrides = {}) {
+  return basePatch(fixture, {
+    max_edits: edits.length,
+    edits,
+    ...overrides,
+  });
+}
+
 function materializePriorRejection(fixture, name = "prior-1", bytes = "rejected report\n") {
   const relative = `rejections/${name}.json`;
   const absolute = resolve(fixture.root, relative);
@@ -134,6 +155,288 @@ test("v3 apply preserves portable frontmatter bytes and emits canonical provenan
   } finally {
     f.cleanup();
   }
+});
+
+test("v3 apply executes all four bounded operations against the immutable source", () => {
+  const f = makeFixture();
+  try {
+    const edits = [
+      supportedEdit("replace-workflow", "replace", "old text", "new text"),
+      supportedEdit("delete-obsolete", "delete", "remove me\n", ""),
+      supportedEdit("insert-guidance", "insert_after", "## Workflow\n", "\ninserted guidance\n"),
+      supportedEdit("append-section", "append", "", "\n## Added\n\nappended guidance\n\n"),
+    ];
+    writeJson(f.edits, patchWithEdits(f, edits, {
+      max_added_bytes: 4096,
+      max_removed_bytes: 4096,
+    }));
+
+    const result = runCli(applyArgs(f));
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(readFileSync(f.source, "utf8"), PORTABLE_SOURCE);
+    const candidate = readFileSync(f.candidate, "utf8");
+    assert.match(candidate, /inserted guidance/);
+    assert.match(candidate, /new text/);
+    assert.doesNotMatch(candidate, /old text|remove me/);
+    assert.ok(
+      candidate.indexOf("## Added") < candidate.indexOf("<!-- SLOW_UPDATE_START -->"),
+      "append must remain outside the protected tail",
+    );
+
+    const report = JSON.parse(readFileSync(f.applyReport, "utf8"));
+    assert.deepEqual(report.applied_edits.map((edit) => edit.op), [
+      "replace",
+      "delete",
+      "insert_after",
+      "append",
+    ]);
+    assert.equal(
+      report.actual_added_bytes,
+      Buffer.byteLength("new text\ninserted guidance\n\n## Added\n\nappended guidance\n\n"),
+    );
+    assert.equal(report.actual_removed_bytes, Buffer.byteLength("old textremove me\n"));
+    assert.equal(report.source_sha256, sha256(PORTABLE_SOURCE));
+    assert.equal(report.candidate_sha256, sha256(candidate));
+  } finally {
+    f.cleanup();
+  }
+});
+
+test("v3 apply accepts exact 4096-byte fields and enforces edit and byte budgets", async (t) => {
+  await t.test("target at exactly 4096 UTF-8 bytes", () => {
+    const target = "é".repeat(2048);
+    assert.equal(Buffer.byteLength(target), 4096);
+    const source = PORTABLE_SOURCE.replace("old text", target);
+    const f = makeFixture(source);
+    try {
+      writeJson(f.edits, patchWithEdits(f, [
+        supportedEdit("replace-boundary-target", "replace", target, "bounded replacement"),
+      ], { max_added_bytes: 4096, max_removed_bytes: 8192 }));
+      const result = runCli(applyArgs(f));
+      assert.equal(result.status, 0, result.stderr);
+      assert.match(readFileSync(f.candidate, "utf8"), /bounded replacement/);
+    } finally {
+      f.cleanup();
+    }
+  });
+
+  await t.test("content at exactly 4096 UTF-8 bytes", () => {
+    const content = "é".repeat(2048);
+    assert.equal(Buffer.byteLength(content), 4096);
+    const f = makeFixture();
+    try {
+      writeJson(f.edits, patchWithEdits(f, [
+        supportedEdit("replace-boundary-content", "replace", "old text", content),
+      ], { max_added_bytes: 4096 }));
+      const result = runCli(applyArgs(f));
+      assert.equal(result.status, 0, result.stderr);
+      assert.match(readFileSync(f.candidate, "utf8"), new RegExp(content.slice(0, 32)));
+    } finally {
+      f.cleanup();
+    }
+  });
+
+  for (const [label, mutate, expected] of [
+    ["4097-byte content", (patch) => {
+      patch.edits = [supportedEdit(
+        "overflow-content",
+        "replace",
+        "old text",
+        `${"é".repeat(2048)}x`,
+      )];
+      patch.max_edits = 1;
+      patch.max_added_bytes = 8192;
+    }, /4096 UTF-8 bytes/],
+    ["actual added-byte budget", (patch) => {
+      patch.edits = [supportedEdit("added-budget", "append", "", "é")];
+      patch.max_edits = 1;
+      patch.max_added_bytes = 1;
+    }, /added bytes 2.*max_added_bytes 1/],
+    ["actual removed-byte budget", (patch) => {
+      patch.edits = [supportedEdit("removed-budget", "delete", "old text", "")];
+      patch.max_edits = 1;
+      patch.max_removed_bytes = 1;
+    }, /removed bytes 8.*max_removed_bytes 1/],
+    ["declared campaign budget", (patch) => {
+      patch.max_added_bytes = 8193;
+    }, /max_added_bytes.*between 1 and 8192/],
+    ["max edits", (patch) => {
+      patch.max_edits = 1;
+    }, /max_edits/],
+  ]) {
+    await t.test(label, () => {
+      const f = makeFixture();
+      try {
+        const patch = basePatch(f);
+        mutate(patch);
+        writeJson(f.edits, patch);
+        const result = runCli(applyArgs(f));
+        assert.equal(result.status, 2, `${label}: ${result.stderr}`);
+        assert.match(result.stderr, expected, label);
+        assertNoApplyOutput(f);
+        assert.equal(readFileSync(f.source, "utf8"), PORTABLE_SOURCE);
+      } finally {
+        f.cleanup();
+      }
+    });
+  }
+});
+
+test("v3 apply rejects missing, duplicate, introduced, and overlapping anchors", async (t) => {
+  const cases = [
+    ["missing target", PORTABLE_SOURCE, [
+      supportedEdit("missing-anchor", "insert_after", "missing target", "unsafe fallback"),
+    ], /exactly once.*found 0/],
+    ["duplicate target", PORTABLE_SOURCE, [
+      supportedEdit("duplicate-anchor", "replace", "text", "ambiguous"),
+    ], /exactly once/],
+    ["introduced anchor", PORTABLE_SOURCE, [
+      supportedEdit("introduce-anchor", "replace", "old text", "new anchor"),
+      supportedEdit("consume-anchor", "replace", "new anchor", "late binding"),
+    ], /original source|exactly once/],
+    ["overlapping targets", PORTABLE_SOURCE.replace("old text", "abcdef"), [
+      supportedEdit("overlap-left", "replace", "abcd", "left"),
+      supportedEdit("overlap-right", "delete", "cdef", ""),
+    ], /overlap/],
+  ];
+
+  for (const [label, source, edits, expected] of cases) {
+    await t.test(label, () => {
+      const f = makeFixture(source);
+      try {
+        writeJson(f.edits, patchWithEdits(f, edits));
+        const result = runCli(applyArgs(f));
+        assert.equal(result.status, 2, `${label}: ${result.stderr}`);
+        assert.match(result.stderr, expected, label);
+        assertNoApplyOutput(f);
+      } finally {
+        f.cleanup();
+      }
+    });
+  }
+
+  await t.test("adjacent insert and replacement retain original coordinates", () => {
+    const source = `---\nname: adjacent-edits\ndescription: Exercise adjacent edit ordering.\n---\n\n# Fixture\n\nAABB\n`;
+    const f = makeFixture(source);
+    try {
+      writeJson(f.edits, patchWithEdits(f, [
+        supportedEdit("replace-right", "replace", "BB", "XX"),
+        supportedEdit("insert-left", "insert_after", "AA", "I"),
+      ]));
+      const result = runCli(applyArgs(f));
+      assert.equal(result.status, 0, result.stderr);
+      assert.match(readFileSync(f.candidate, "utf8"), /\nAAIXX\n$/);
+    } finally {
+      f.cleanup();
+    }
+  });
+});
+
+test("v3 apply protects Skill syntax, frontmatter, marker regions, and input encoding", async (t) => {
+  const invalidSources = [
+    ["missing description", `---\nname: missing-description\n---\n\n# Bad\n`, /description|frontmatter/i],
+    ["invalid YAML scalar", `---\nname: [\ndescription: Valid description\n---\n\n# Bad\n`, /YAML|frontmatter|name/i],
+    ["null description", `---\nname: fixture-skill\ndescription: null\n---\n\n# Bad\n`, /description|frontmatter/i],
+    ["nonportable name", `---\nname: invalid--name\ndescription: Valid description\n---\n\n# Bad\n`, /name|hyphen-case/i],
+    ["invalid trailing colon", `---\nname: fixture-skill\ndescription: invalid trailing colon:\n---\n\n# Bad\n`, /YAML|description|frontmatter/i],
+    ["tab in scalar", `---\nname: fixture-skill\ndescription: invalid\ttab\n---\n\n# Bad\n`, /YAML|description|frontmatter|tab/i],
+    ["C0 control in scalar", `---\nname: fixture-skill\ndescription: invalid\u0000control\n---\n\n# Bad\n`, /YAML|description|frontmatter|control/i],
+    ["NEL in scalar", `---\nname: fixture-skill\ndescription: invalid\u0085separator\n---\n\n# Bad\n`, /YAML|description|frontmatter|control|separator/i],
+    ["Unicode line separator in scalar", `---\nname: fixture-skill\ndescription: invalid\u2028separator\n---\n\n# Bad\n`, /YAML|description|frontmatter|control|separator/i],
+    ["protected marker in frontmatter", `---\nname: fixture-skill\ndescription: x <!-- SLOW_UPDATE_START --> guarded <!-- SLOW_UPDATE_END -->\n---\n\n# Bad\n`, /frontmatter.*protected|protected.*frontmatter/i],
+  ];
+  for (const [label, source, expected] of invalidSources) {
+    await t.test(label, () => {
+      const f = makeFixture(source);
+      try {
+        writeJson(f.edits, patchWithEdits(f, [
+          supportedEdit("append-invalid-source", "append", "", "more"),
+        ]));
+        const result = runCli(applyArgs(f));
+        assert.equal(result.status, 2, `${label}: ${result.stderr}`);
+        assert.match(result.stderr, expected, label);
+        assertNoApplyOutput(f);
+      } finally {
+        f.cleanup();
+      }
+    });
+  }
+
+  for (const [label, edit, expected] of [
+    ["frontmatter target", supportedEdit(
+      "frontmatter-target",
+      "replace",
+      "name: fixture-skill",
+      "name: hijacked",
+    ), /protected region/],
+    ["protected body target", supportedEdit(
+      "protected-body-target",
+      "delete",
+      "protected text",
+      "",
+    ), /protected region/],
+    ["introduced marker", supportedEdit(
+      "introduced-marker",
+      "append",
+      "",
+      "<!-- APPENDIX_START -->injected<!-- APPENDIX_END -->",
+    ), /protected marker/],
+  ]) {
+    await t.test(label, () => {
+      const f = makeFixture();
+      try {
+        writeJson(f.edits, patchWithEdits(f, [edit]));
+        const result = runCli(applyArgs(f));
+        assert.equal(result.status, 2, `${label}: ${result.stderr}`);
+        assert.match(result.stderr, expected, label);
+        assertNoApplyOutput(f);
+      } finally {
+        f.cleanup();
+      }
+    });
+  }
+
+  for (const [label, bytes, expected] of [
+    ["UTF-8 BOM", Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), Buffer.from(PORTABLE_SOURCE)]), /BOM/],
+    ["CRLF", Buffer.from(PORTABLE_SOURCE.replaceAll("\n", "\r\n")), /LF line endings|carriage/],
+    ["non-UTF-8", Buffer.concat([Buffer.from(PORTABLE_SOURCE), Buffer.from([0xc3])]), /valid UTF-8/],
+  ]) {
+    await t.test(label, () => {
+      const f = makeFixture();
+      try {
+        writeFileSync(f.source, bytes);
+        writeJson(f.edits, patchWithEdits(f, [
+          supportedEdit("append-encoding", "append", "", "new guidance"),
+        ]));
+        const result = runCli(applyArgs(f));
+        assert.equal(result.status, 2, `${label}: ${result.stderr}`);
+        assert.match(result.stderr, expected, label);
+        assertNoApplyOutput(f);
+      } finally {
+        f.cleanup();
+      }
+    });
+  }
+
+  await t.test("duplicate JSON key", () => {
+    const f = makeFixture();
+    try {
+      const patch = patchWithEdits(f, [
+        supportedEdit("duplicate-json-key", "append", "", "new guidance"),
+      ]);
+      const serialized = JSON.stringify(patch).replace(
+        `\"source_sha256\":\"${patch.source_sha256}\"`,
+        `\"source_sha256\":\"${"0".repeat(64)}\",\"source_sha256\":\"${patch.source_sha256}\"`,
+      );
+      writeFileSync(f.edits, serialized);
+      const result = runCli(applyArgs(f));
+      assert.equal(result.status, 2, result.stderr);
+      assert.match(result.stderr, /duplicate JSON key.*source_sha256/i);
+      assertNoApplyOutput(f);
+    } finally {
+      f.cleanup();
+    }
+  });
 });
 
 test("v3 apply rejects closed-schema and provenance inconsistencies with exit 2", () => {
@@ -709,6 +1012,8 @@ test("v3 apply removes only its pinned temp after a temp write failure", () => {
   const f = makeFixture();
   try {
     writeJson(f.edits, basePatch(f));
+    const foreignTemp = resolve(f.root, ".skill-lab-apply-foreign-owner");
+    writeFileSync(foreignTemp, "must survive\n");
     const failurePrelude = `const fs = require("node:fs");
 const originalWrite = fs.writeFileSync;
 fs.writeFileSync = function(path, ...rest) {
@@ -742,11 +1047,12 @@ fs.writeFileSync = function(path, ...rest) {
       + `};\n`
       + `syncBuiltinESMExports();\n`;
     const result = runWithHook(f, applyArgs(f), hook);
-    assert.equal(
-      readdirSync(f.root).some((name) => name.startsWith(".skill-lab-apply-")),
-      false,
-      "the pinned temporary source must be removed",
+    assert.deepEqual(
+      readdirSync(f.root).filter((name) => name.startsWith(".skill-lab-apply-")),
+      [".skill-lab-apply-foreign-owner"],
+      "only the pinned temporary source may be removed",
     );
+    assert.equal(readFileSync(foreignTemp, "utf8"), "must survive\n");
     assert.equal(result.status, 6, result.stderr);
     assert.match(result.stderr, /publication_failure|temporary|ENOSPC|write/i);
     assertNoApplyOutput(f);

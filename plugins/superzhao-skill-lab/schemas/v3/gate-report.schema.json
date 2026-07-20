@@ -153,7 +153,7 @@
         "valid": {
           "type": "integer",
           "minimum": 0,
-          "maximum": 20
+          "maximum": 1000
         }
       }
     },
@@ -167,8 +167,8 @@
         },
         "count": {
           "type": "integer",
-          "minimum": 1,
-          "maximum": 20
+          "minimum": 2,
+          "maximum": 1000
         }
       }
     },
@@ -198,7 +198,7 @@
         },
         "repeated_current_failure_codes": {
           "type": "array",
-          "maxItems": 20,
+          "maxItems": 500,
           "uniqueItems": true,
           "items": {
             "$ref": "#/$defs/failureCount"

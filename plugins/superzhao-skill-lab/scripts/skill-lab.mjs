@@ -31,6 +31,22 @@ const MAX_BUNDLE_BYTES = 96 * 1024 * 1024;
 const MAX_SAMPLE_ROWS = 1000;
 const MIN_REQUIRED_VALID = 5;
 const MAX_REQUIRED_VALID = 20;
+const CAMPAIGN_ARTIFACT_KINDS = new Set([
+  "patch",
+  "cases",
+  "samples",
+  "actor-run",
+  "scorer-record",
+  "prior-rejection",
+  "prompt",
+  "rubric",
+  "environment",
+  "actor-profile",
+  "scorer-profile",
+  "harness-model-profile",
+  "transcript",
+  "scorer-output",
+]);
 const PATCH_SCHEMA_V3 = "superzhao.skill-lab.patch/v3";
 const CASES_SCHEMA_V3 = "superzhao.skill-lab.cases/v3";
 const SAMPLES_SCHEMA_V3 = "superzhao.skill-lab.samples/v3";
@@ -1504,7 +1520,7 @@ function validatePatchV3(value) {
   };
 }
 
-function planEdits(content, edits, skillValidator = validateSkill) {
+function planEdits(content, edits, skillValidator = validateSkillV3) {
   const { frontmatter, protectedRanges } = skillValidator(content);
   const planned = edits.map((edit, offset) => {
     const index = offset + 1;
@@ -1559,7 +1575,7 @@ function planEdits(content, edits, skillValidator = validateSkill) {
   return planned;
 }
 
-function applyPlannedEdits(source, planned, skillValidator = validateSkill) {
+function applyPlannedEdits(source, planned, skillValidator = validateSkillV3) {
   let candidate = source;
   const reports = new Map();
   const applicationOrder = [...planned].sort((left, right) => {
@@ -3013,9 +3029,10 @@ function doctorCommand(options) {
 }
 
 function readBoundedPhysicalFile(path, label) {
+  const absolute = resolve(path);
   let before;
   try {
-    before = lstatSync(path, { bigint: true });
+    before = lstatSync(absolute, { bigint: true });
   } catch (error) {
     throw classifiedError("unsafe_path_or_integrity", `${label} is unavailable: ${error.message}`);
   }
@@ -3028,11 +3045,13 @@ function readBoundedPhysicalFile(path, label) {
       `${label} exceeds the ${MAX_INPUT_BYTES}-byte (8 MiB) input limit`,
     );
   }
+  const beforeRecord = bundleStatRecord(before, "file");
   let descriptor;
   try {
-    descriptor = openSync(path, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW);
+    descriptor = openSync(absolute, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW);
     const opened = fstatSync(descriptor, { bigint: true });
-    if (!opened.isFile() || !sameBigIntIdentity(opened, before)) {
+    const openedRecord = bundleStatRecord(opened, "file");
+    if (!opened.isFile() || !sameBundleStatRecord(openedRecord, beforeRecord)) {
       throw classifiedError("unsafe_path_or_integrity", `${label} changed while it was opened`);
     }
     let capacity = Math.max(1, Number(opened.size) + 1);
@@ -3054,16 +3073,38 @@ function readBoundedPhysicalFile(path, label) {
       length += count;
     }
     const after = fstatSync(descriptor, { bigint: true });
-    if (!sameBigIntIdentity(after, opened)) {
-      throw classifiedError("unsafe_path_or_integrity", `${label} identity changed during read`);
-    }
-    if (length > MAX_INPUT_BYTES || after.size > BigInt(MAX_INPUT_BYTES)) {
+    const afterRecord = bundleStatRecord(after, "file");
+    let finalPath;
+    try {
+      finalPath = lstatSync(absolute, { bigint: true });
+    } catch (error) {
       throw classifiedError(
-        "usage_or_schema",
-        `${label} exceeds the ${MAX_INPUT_BYTES}-byte (8 MiB) input limit`,
+        "unsafe_path_or_integrity",
+        `${label} path is unavailable after read: ${error.message}`,
       );
     }
-    return { bytes: bytes.subarray(0, length), sha256: sha256(bytes.subarray(0, length)) };
+    if (finalPath.isSymbolicLink() || !finalPath.isFile()
+        || !sameBundleStatRecord(afterRecord, openedRecord)
+        || !sameBundleStatRecord(bundleStatRecord(finalPath, "file"), openedRecord)) {
+      throw classifiedError(
+        "unsafe_path_or_integrity",
+        `${label} physical identity or bytes changed during read`,
+      );
+    }
+    if (length > MAX_INPUT_BYTES || after.size > BigInt(MAX_INPUT_BYTES)
+        || BigInt(length) !== after.size) {
+      throw classifiedError(
+        "usage_or_schema",
+        `${label} has an unstable size or exceeds the ${MAX_INPUT_BYTES}-byte (8 MiB) input limit`,
+      );
+    }
+    const retained = bytes.subarray(0, length);
+    return {
+      path: absolute,
+      bytes: retained,
+      sha256: sha256(retained),
+      stat: openedRecord,
+    };
   } catch (error) {
     if (error instanceof CliError) throw error;
     throw classifiedError("unsafe_path_or_integrity", `${label} could not be read: ${error.message}`);
@@ -3071,6 +3112,18 @@ function readBoundedPhysicalFile(path, label) {
     if (descriptor !== undefined) {
       try { closeSync(descriptor); } catch {}
     }
+  }
+}
+
+function verifyBoundedPhysicalFileBinding(binding, label) {
+  const current = readBoundedPhysicalFile(binding.path, label);
+  if (!sameBundleStatRecord(current.stat, binding.stat)
+      || current.sha256 !== binding.sha256
+      || !current.bytes.equals(binding.bytes)) {
+    throw classifiedError(
+      "unsafe_path_or_integrity",
+      `${label} no longer matches its early command binding`,
+    );
   }
 }
 
@@ -3090,7 +3143,7 @@ function readInstalledStageProducer() {
       || !/^[0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?$/.test(plugin.version)) {
     throw new CliError("installed plugin manifest version is not a supported semantic version");
   }
-  return {
+  const producer = {
     bytes: cli.bytes,
     sha256: cli.sha256,
     identity: {
@@ -3102,6 +3155,11 @@ function readInstalledStageProducer() {
       arch: process.arch,
     },
   };
+  producer.verify = () => {
+    verifyBoundedPhysicalFileBinding(cli, "installed producer CLI");
+    verifyBoundedPhysicalFileBinding(pluginArtifact, "installed plugin manifest");
+  };
+  return producer;
 }
 
 function retainedDescriptor(store, descriptor, label) {
@@ -3463,7 +3521,7 @@ function removePublishedStageFileIfOwned(file) {
   }
 }
 
-function publishStageBundle(workspace, outputInput, plan) {
+function publishStageBundle(workspace, outputInput, plan, verifyInstalledProducer) {
   const destination = stageOutputParentAnchor(workspace, outputInput);
   const root = createPublishedStageDirectory(
     destination.anchor,
@@ -3512,6 +3570,7 @@ function publishStageBundle(workspace, outputInput, plan) {
   );
   let manifestFile;
   try {
+    verifyInstalledProducer();
     manifestFile = linkPublishedStageFileFromParent(
       root,
       destination.anchor,
@@ -3519,6 +3578,10 @@ function publishStageBundle(workspace, outputInput, plan) {
       "manifest.json",
       "bundle manifest",
     );
+    verifyInstalledProducer();
+  } catch (error) {
+    if (manifestFile) removePublishedStageFileIfOwned(manifestFile);
+    throw error;
   } finally {
     removePublishedStageFileIfOwned(manifestSource);
   }
@@ -3539,6 +3602,13 @@ function stageCommand(options) {
     "gate-report",
     "output-dir",
   ]);
+  let producer;
+  let producerError;
+  try {
+    producer = readInstalledStageProducer();
+  } catch (error) {
+    producerError = error;
+  }
   let workspace;
   try {
     workspace = prepareWorkspace(paths["workspace-root"]);
@@ -3618,12 +3688,6 @@ function stageCommand(options) {
     Buffer.from(canonicalJsonLine(recomputedGate)),
   ) && canonicalJson(suppliedGate) === canonicalJson(recomputedGate);
 
-  if (!bindingsMatch || !candidateMatches || !applyMatches || !gateMatches) {
-    throw classifiedError(
-      "unsafe_path_or_integrity",
-      "stage inputs or reports do not match trusted apply and gate recomputation",
-    );
-  }
   if (recomputedGate.selection.status === "selection_reject") {
     throw classifiedError("selection_rejection", "candidate rejected during selection");
   }
@@ -3633,8 +3697,14 @@ function stageCommand(options) {
       `candidate did not pass held-out evaluation (${recomputedGate.final.status})`,
     );
   }
-
-  const producer = readInstalledStageProducer();
+  if (!bindingsMatch || !candidateMatches || !applyMatches || !gateMatches) {
+    throw classifiedError(
+      "unsafe_path_or_integrity",
+      "stage inputs or reports do not match trusted apply and gate recomputation",
+    );
+  }
+  if (producerError) throw producerError;
+  producer.verify();
   const plan = buildStageBundlePlan({
     store,
     ledgerValue,
@@ -3645,7 +3715,12 @@ function stageCommand(options) {
     gateArtifact,
     producer,
   });
-  publishStageBundle(workspace, paths["output-dir"], plan);
+  publishStageBundle(
+    workspace,
+    paths["output-dir"],
+    plan,
+    () => producer.verify(),
+  );
 }
 
 function bundlePath(value, label) {
@@ -4182,22 +4257,57 @@ class BundleArtifactStore {
     this.manifestIndex = manifestIndex;
     this.payloads = payloads;
     this.byLogicalPath = new Map();
+    this.mappingsByIdentity = new Map();
     this.usedMappings = new Set();
+    this.countedPhysicalArtifacts = new Set();
+    this.campaignBytes = 0n;
     for (const mapping of manifestIndex.mappings) {
+      if (Object.hasOwn(mapping, "source_path")) {
+        const key = this.mappingIdentityKey(
+          mapping.kind,
+          mapping.source_path,
+          mapping.sha256,
+        );
+        const indexed = this.mappingsByIdentity.get(key) ?? [];
+        indexed.push(mapping);
+        this.mappingsByIdentity.set(key, indexed);
+      }
       if (!Object.hasOwn(mapping, "source_path")) continue;
       const file = payloads.get(mapping.packaged_path);
       this.byLogicalPath.set(mapping.source_path, {
         path: mapping.source_path,
         bytes: file.bytes,
         sha256: file.sha256,
-        physicalKey: `bundle:${mapping.packaged_path}:${file.sha256}`,
+        physicalKey: `${file.stat.dev}:${file.stat.ino}:${file.sha256}`,
         packagedPath: mapping.packaged_path,
+        stat: file.stat,
       });
     }
   }
 
   mappingKey(mapping) {
     return canonicalJson(mapping);
+  }
+
+  mappingIdentityKey(kind, sourcePath, digest) {
+    return canonicalJson([kind, sourcePath, digest]);
+  }
+
+  useMapping(mapping, label) {
+    this.usedMappings.add(this.mappingKey(mapping));
+    if (!CAMPAIGN_ARTIFACT_KINDS.has(mapping.kind)) return;
+    const payload = this.payloads.get(mapping.packaged_path);
+    const physicalKey = `${payload.stat.dev}:${payload.stat.ino}:${payload.sha256}`;
+    if (this.countedPhysicalArtifacts.has(physicalKey)) return;
+    const next = this.campaignBytes + BigInt(payload.bytes.length);
+    if (next > BigInt(MAX_CAMPAIGN_BYTES)) {
+      throw classifiedError(
+        "unsafe_path_or_integrity",
+        `${label} exceeds the ${MAX_CAMPAIGN_BYTES}-byte (64 MiB) aggregate campaign limit`,
+      );
+    }
+    this.countedPhysicalArtifacts.add(physicalKey);
+    this.campaignBytes = next;
   }
 
   readRelative(path, expectedSha, label) {
@@ -4224,31 +4334,30 @@ class BundleArtifactStore {
 
   assertKind(path, digest, kind, label) {
     const normalized = bundlePath(path, label);
-    const matches = this.manifestIndex.mappings.filter(
-      (mapping) => mapping.source_path === normalized
-        && mapping.sha256 === digest
-        && mapping.kind === kind,
-    );
+    const matches = this.mappingsByIdentity.get(
+      this.mappingIdentityKey(kind, normalized, digest),
+    ) ?? [];
     if (matches.length !== 1) {
       throw classifiedError(
         "unsafe_path_or_integrity",
         `${label} must resolve to exactly one ${kind} mapping`,
       );
     }
-    this.usedMappings.add(this.mappingKey(matches[0]));
+    this.useMapping(matches[0], label);
   }
 
   entrypoint(name) {
     const mapping = this.manifestIndex.entrypointMappings.get(name);
     const payload = this.payloads.get(mapping.packaged_path);
-    this.usedMappings.add(this.mappingKey(mapping));
+    this.useMapping(mapping, `bundle entrypoint ${name}`);
     return {
       mapping,
       artifact: {
         path: mapping.source_path ?? mapping.packaged_path,
         bytes: payload.bytes,
         sha256: payload.sha256,
-        physicalKey: `bundle:${mapping.packaged_path}:${payload.sha256}`,
+        physicalKey: `${payload.stat.dev}:${payload.stat.ino}:${payload.sha256}`,
+        stat: payload.stat,
       },
     };
   }
@@ -4295,8 +4404,11 @@ function bindV3BundlePayloads(reader, manifestArtifact, manifestIndex) {
       `bundle is ${actualTotal} bytes; maximum is ${MAX_BUNDLE_BYTES} bytes (96 MiB)`,
     );
   }
-  if (before.files.get("manifest.json").size !== BigInt(manifestArtifact.bytes.length)) {
-    throw classifiedError("unsafe_path_or_integrity", "bundle manifest size changed");
+  if (!sameBundleStatRecord(before.files.get("manifest.json"), manifestArtifact.stat)) {
+    throw classifiedError(
+      "unsafe_path_or_integrity",
+      "bundle manifest physical identity or bytes changed before the first tree scan",
+    );
   }
   const payloads = new Map();
   for (const [path, declared] of manifestIndex.filesByPath) {
@@ -4531,8 +4643,21 @@ function verifyLegacyV2Bundle(reader, manifestArtifact, manifest) {
       "legacy v2 physical directory tree does not exactly match manifest paths",
     );
   }
-  if (before.files.get("manifest.json").size !== BigInt(manifestArtifact.bytes.length)) {
-    throw classifiedError("unsafe_path_or_integrity", "legacy v2 manifest size changed");
+  const actualTotal = actualFiles.reduce(
+    (total, path) => total + before.files.get(path).size,
+    0n,
+  );
+  if (actualTotal > BigInt(MAX_BUNDLE_BYTES)) {
+    throw classifiedError(
+      "unsafe_path_or_integrity",
+      `legacy v2 bundle is ${actualTotal} bytes; maximum is ${MAX_BUNDLE_BYTES} bytes (96 MiB)`,
+    );
+  }
+  if (!sameBundleStatRecord(before.files.get("manifest.json"), manifestArtifact.stat)) {
+    throw classifiedError(
+      "unsafe_path_or_integrity",
+      "legacy v2 manifest physical identity or bytes changed before the first tree scan",
+    );
   }
 
   const payloads = new Map();
@@ -4651,17 +4776,18 @@ function verifyBundleCommand(options, legacyV2 = false) {
     throw new CliError(`verify-bundle requires ${BUNDLE_MANIFEST_SCHEMA_V3}`);
   }
   try {
+    const verifier = readInstalledStageProducer();
     const manifestIndex = validateV3BundleManifest(manifest);
     const bound = bindV3BundlePayloads(reader, manifestArtifact, manifestIndex);
     recomputeTrustedV3Bundle(manifest, manifestIndex, bound.payloads);
     const after = reader.scan();
     assertBundleSnapshotsEqual(bound.before, after);
-    const verifier = readInstalledStageProducer().identity;
+    verifier.verify();
     process.stdout.write(canonicalJsonLine({
       status: "final_accept",
       manifest_sha256: manifestArtifact.sha256,
       producer: manifest.producer,
-      verifier,
+      verifier: verifier.identity,
     }));
   } catch (error) {
     if (error instanceof CliError && error.exitCode === EXIT_CODES.unsupported_preflight) {

@@ -8,13 +8,21 @@ import {
   readFileSync,
   rmSync,
   symlinkSync,
+  truncateSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, resolve } from "node:path";
 import test from "node:test";
 
-import { canonicalJson, cli, repoRoot, runCli, sha256 } from "./helpers.mjs";
+import {
+  canonicalJson,
+  cli,
+  repoRoot,
+  runCli,
+  runWithHook,
+  sha256,
+} from "./helpers.mjs";
 
 const FIXTURE = resolve(repoRoot, "tests/skill-lab/fixtures/v2-bundle-valid/bundle");
 
@@ -71,6 +79,29 @@ function copyHistoricalWorkspaceArtifacts(root, bundle) {
   }
 }
 
+function inflateLegacyBundlePastLimit(bundle) {
+  const manifestArtifact = readManifest(bundle);
+  for (let index = 0; index < 12; index += 1) {
+    const digest = (index + 1).toString(16).padStart(64, "0");
+    const packagedPath = `evidence/aggregate-${index + 1}.bin`;
+    const absolute = resolve(bundle, packagedPath);
+    writeFileSync(absolute, "");
+    truncateSync(absolute, 8 * 1024 * 1024);
+    manifestArtifact.value.evidence[digest] = {
+      packaged_path: packagedPath,
+      sha256: digest,
+      workspace_paths: [`historical/aggregate-${index + 1}.bin`],
+      sample_ids: [`aggregate-sample-${index + 1}`],
+    };
+    manifestArtifact.value.files[packagedPath] = {
+      sha256: digest,
+      bytes: 8 * 1024 * 1024,
+    };
+  }
+  writeFileSync(manifestArtifact.path, canonicalLine(manifestArtifact.value));
+  return resolve(bundle, "evidence/aggregate-1.bin");
+}
+
 test("legacy-v2 verifier accepts the authentic fixture structurally in either flag order", () => {
   const copy = makeBundleCopy("authentic");
   try {
@@ -103,6 +134,69 @@ test("legacy-v2 verifier accepts the authentic fixture structurally in either fl
       assert.equal(result.stdout, expected);
       assert.doesNotMatch(result.stdout, /final_accept|"decision"|"accept"/);
     }
+  } finally {
+    copy.cleanup();
+  }
+});
+
+test("legacy-v2 binds the manifest read to the first full tree scan", () => {
+  const copy = makeBundleCopy("manifest-read-scan-race");
+  try {
+    const manifestPath = resolve(copy.bundle, "manifest.json");
+    const original = readFileSync(manifestPath, "utf8");
+    const manifest = JSON.parse(original);
+    const changedId = `${manifest.campaign_id.slice(0, -1)}x`;
+    assert.equal(Buffer.byteLength(changedId), Buffer.byteLength(manifest.campaign_id));
+    const replacement = original.replace(manifest.campaign_id, changedId);
+    assert.notEqual(replacement, original);
+    assert.equal(Buffer.byteLength(replacement), Buffer.byteLength(original));
+    const hook = `const fs = require("node:fs");\n`
+      + `const path = require("node:path");\n`
+      + `const { syncBuiltinESMExports } = require("node:module");\n`
+      + `const originalReaddir = fs.readdirSync;\n`
+      + `const root = ${JSON.stringify(copy.bundle)};\n`
+      + `const manifest = ${JSON.stringify(manifestPath)};\n`
+      + `const replacement = Buffer.from(${JSON.stringify(replacement)});\n`
+      + `let changed = false;\n`
+      + `fs.readdirSync = function(value, ...args) {\n`
+      + `  const result = originalReaddir.call(this, value, ...args);\n`
+      + `  if (!changed && path.resolve(String(value)) === root) {\n`
+      + `    changed = true;\n`
+      + `    fs.writeFileSync(manifest, replacement);\n`
+      + `  }\n`
+      + `  return result;\n`
+      + `};\n`
+      + `syncBuiltinESMExports();\n`;
+    assertLegacyIntegrityFailure(
+      runWithHook(copy, legacyArgs(copy.bundle), hook),
+    );
+  } finally {
+    copy.cleanup();
+  }
+});
+
+test("legacy-v2 rejects an actual bundle over 96 MiB before reading payloads", () => {
+  const copy = makeBundleCopy("aggregate-limit");
+  try {
+    const watched = inflateLegacyBundlePastLimit(copy.bundle);
+    const marker = resolve(copy.root, "payload-read-marker");
+    const hook = `const fs = require("node:fs");\n`
+      + `const { syncBuiltinESMExports } = require("node:module");\n`
+      + `const originalRead = fs.readSync;\n`
+      + `const watched = fs.lstatSync(${JSON.stringify(watched)}, { bigint: true });\n`
+      + `const marker = ${JSON.stringify(marker)};\n`
+      + `fs.readSync = function(fd, ...args) {\n`
+      + `  const stat = fs.fstatSync(fd, { bigint: true });\n`
+      + `  if (stat.dev === watched.dev && stat.ino === watched.ino) {\n`
+      + `    fs.writeFileSync(marker, "read\\n");\n`
+      + `  }\n`
+      + `  return originalRead.call(this, fd, ...args);\n`
+      + `};\n`
+      + `syncBuiltinESMExports();\n`;
+    const result = runWithHook(copy, legacyArgs(copy.bundle), hook);
+    assertLegacyIntegrityFailure(result);
+    assert.match(result.stderr, /96 MiB|100663296|maximum/i);
+    assert.equal(existsSync(marker), false, "aggregate overflow must fail before payload reads");
   } finally {
     copy.cleanup();
   }

@@ -81,6 +81,27 @@ const ENTRYPOINT_KINDS = {
   producer_cli: "producer-cli",
 };
 
+const CAMPAIGN_INCLUDED_KINDS = new Set([
+  "patch",
+  "cases",
+  "samples",
+  "actor-run",
+  "scorer-record",
+  "prior-rejection",
+  "prompt",
+  "rubric",
+  "environment",
+  "actor-profile",
+  "scorer-profile",
+  "harness-model-profile",
+  "transcript",
+  "scorer-output",
+]);
+
+const TEST_MAX_INPUT_BYTES = 8 * 1024 * 1024;
+const TEST_MAX_CAMPAIGN_BYTES = 64 * 1024 * 1024;
+const TEST_MAX_BUNDLE_BYTES = 96 * 1024 * 1024;
+
 function canonicalLine(value) {
   return `${canonicalJson(value)}\n`;
 }
@@ -191,6 +212,23 @@ function writeSizedPriorRejections(bundle, sizes) {
     (rejection) => !rejection.report.path.startsWith(SIZE_PADDING_PREFIX),
   );
 
+  const aliasPath = "proposal/rejections/shared-environment.json";
+  if (!patch.prior_rejections.some((rejection) => rejection.report.path === aliasPath)) {
+    const environment = mappingOfKind(manifest, "environment");
+    patch.prior_rejections.push({
+      rejection_id: "shared-environment-physical-dedup",
+      report: { path: aliasPath, sha256: environment.sha256 },
+      relationship: "not-applicable",
+      note: "Exercises physical campaign-byte deduplication across included mappings.",
+    });
+    manifest.artifacts.push({
+      kind: "prior-rejection",
+      source_path: aliasPath,
+      packaged_path: environment.packaged_path,
+      sha256: environment.sha256,
+    });
+  }
+
   for (const [index, size] of sizes.entries()) {
     assert.ok(Number.isInteger(size) && size >= 0 && size <= 8 * 1024 * 1024);
     const bytes = Buffer.alloc(size, 0x41 + index);
@@ -245,16 +283,266 @@ function writeSizedPriorRejections(bundle, sizes) {
     + manifestBytes.length;
 }
 
-function resizeBundleToExactLimit(bundle, limit) {
-  const fixed = Array.from({ length: 11 }, (_, index) => 8 * 1024 * 1024 - index);
-  let last = 8 * 1024 * 1024 - 512 * 1024;
+function trustedCampaignOracle(bundle) {
+  const manifest = readBundleManifest(bundle).value;
+  const files = new Map(manifest.files.map((file) => [file.path, file]));
+  const physical = new Map();
+  let includedMappings = 0;
+  for (const mapping of manifest.artifacts) {
+    if (!CAMPAIGN_INCLUDED_KINDS.has(mapping.kind)) continue;
+    includedMappings += 1;
+    const file = files.get(mapping.packaged_path);
+    assert.ok(file, mapping.packaged_path);
+    const absolute = resolve(bundle, mapping.packaged_path);
+    const stat = lstatSync(absolute, { bigint: true });
+    assert.equal(stat.isFile(), true, mapping.packaged_path);
+    assert.equal(stat.isSymbolicLink(), false, mapping.packaged_path);
+    assert.equal(stat.size, BigInt(file.bytes), mapping.packaged_path);
+    const digest = sha256(readFileSync(absolute));
+    assert.equal(digest, file.sha256, mapping.packaged_path);
+    assert.equal(digest, mapping.sha256, mapping.packaged_path);
+    const key = `${stat.dev}:${stat.ino}:${digest}`;
+    physical.set(key, stat.size);
+  }
+  return {
+    bytes: [...physical.values()].reduce((total, size) => total + size, 0n),
+    includedMappings,
+    uniquePhysical: physical.size,
+  };
+}
+
+function actualBundleOracle(bundle) {
+  const tree = collectPublishedTree(bundle);
+  const files = tree.files.map((file) => ({
+    path: file.path,
+    bytes: Number(file.stat.size),
+  }));
+  for (const file of files) {
+    assert.ok(file.bytes <= TEST_MAX_INPUT_BYTES, `${file.path} exceeds 8 MiB`);
+  }
+  return {
+    bytes: files.reduce((total, file) => total + file.bytes, 0),
+    files,
+  };
+}
+
+function expectedStagePlanOracle(fixture, producerBytes, pluginVersion = "9.8.7") {
+  const graph = expectedStageGraph(fixture, producerBytes);
+  const ledger = JSON.parse(readFileSync(fixture.results, "utf8"));
+  const patch = JSON.parse(readFileSync(fixture.edits, "utf8"));
+  const manifest = {
+    schema: "superzhao.skill-lab.bundle-manifest/v3",
+    campaign_id: ledger.campaign_id,
+    proposal_id: patch.proposal_id,
+    producer: {
+      plugin_id: "superzhao-skill-lab",
+      plugin_version: pluginVersion,
+      cli_sha256: sha256(producerBytes),
+      node_version: process.version,
+      platform: process.platform,
+      arch: process.arch,
+    },
+    entrypoints: graph.entrypoints,
+    artifacts: graph.artifacts,
+    files: graph.files,
+  };
+  const manifestBytes = Buffer.from(canonicalLine(manifest));
+  const fileBytes = graph.files.reduce((total, file) => total + file.bytes, 0);
+  const includedPaths = new Set(
+    graph.artifacts
+      .filter((mapping) => CAMPAIGN_INCLUDED_KINDS.has(mapping.kind))
+      .map((mapping) => mapping.packaged_path),
+  );
+  const filesByPath = new Map(graph.files.map((file) => [file.path, file]));
+  const campaignBytes = [...includedPaths].reduce(
+    (total, path) => total + filesByPath.get(path).bytes,
+    0,
+  );
+  return {
+    graph,
+    manifest,
+    manifestBytes,
+    bundleBytes: fileBytes + manifestBytes.length,
+    campaignBytes,
+    maxFileBytes: Math.max(manifestBytes.length, ...graph.files.map((file) => file.bytes)),
+  };
+}
+
+function padCopiedCliTo(bytes, target) {
+  const prefix = Buffer.concat([bytes, Buffer.from("\n/* exact bundle-size padding\n")]);
+  const suffix = Buffer.from("\n*/\n");
+  assert.ok(prefix.length + suffix.length <= target);
+  return Buffer.concat([
+    prefix,
+    Buffer.alloc(target - prefix.length - suffix.length, 0x78),
+    suffix,
+  ]);
+}
+
+function writePrettyJsonBytes(value) {
+  return Buffer.from(`${JSON.stringify(value, null, 2)}\n`);
+}
+
+function prepareExact96Workspace() {
+  const fixture = makeV3CampaignFixture();
+  try {
+    const patch = JSON.parse(readFileSync(fixture.edits, "utf8"));
+    const source = readFileSync(fixture.source, "utf8");
+    const edit = patch.edits[0];
+    const growth = Buffer.byteLength(edit.content) - Buffer.byteLength(edit.target);
+    const sourceTarget = TEST_MAX_INPUT_BYTES - growth;
+    assert.ok(sourceTarget > Buffer.byteLength(source));
+    const largeSource = `${source}${"x".repeat(sourceTarget - Buffer.byteLength(source))}`;
+    assert.equal(Buffer.byteLength(largeSource), sourceTarget);
+    writeFileSync(fixture.source, largeSource);
+    patch.source_sha256 = sha256(largeSource);
+
+    const padding = [];
+    for (let index = 0; index < 7; index += 1) {
+      const path = `proposal/rejections/exact-bundle-${index + 1}.bin`;
+      const absolute = resolve(fixture.root, path);
+      const size = index < 6 ? TEST_MAX_INPUT_BYTES : 0;
+      const bytes = Buffer.alloc(size, 0x51 + index);
+      writeFileSync(absolute, bytes);
+      const descriptor = { path, sha256: sha256(bytes) };
+      patch.prior_rejections.push({
+        rejection_id: `exact-bundle-${index + 1}`,
+        report: descriptor,
+        relationship: "not-applicable",
+        note: "Retained to exercise the exact staged-bundle byte boundary.",
+      });
+      padding.push({ absolute, descriptor, rejection: patch.prior_rejections.at(-1), size });
+    }
+
+    patch.prior_rejections[0].note = "x";
+    let patchBytes = writePrettyJsonBytes(patch);
+    const noteGrowth = TEST_MAX_INPUT_BYTES - patchBytes.length;
+    assert.ok(noteGrowth > 0);
+    patch.prior_rejections[0].note += "x".repeat(noteGrowth);
+    patchBytes = writePrettyJsonBytes(patch);
+    assert.equal(patchBytes.length, TEST_MAX_INPUT_BYTES);
+
+    const applyCurrentPatch = (lastSize) => {
+      const last = padding.at(-1);
+      const bytes = Buffer.alloc(lastSize, 0x5a);
+      writeFileSync(last.absolute, bytes);
+      last.size = lastSize;
+      last.descriptor.sha256 = sha256(bytes);
+      last.rejection.report.sha256 = last.descriptor.sha256;
+      const serialized = writePrettyJsonBytes(patch);
+      assert.equal(serialized.length, TEST_MAX_INPUT_BYTES);
+      writeFileSync(fixture.edits, serialized);
+      rmSync(fixture.candidate, { force: true });
+      rmSync(fixture.applyReport, { force: true });
+      const result = runCli(applyArgs(fixture));
+      assert.equal(result.status, 0, result.stderr);
+      assert.equal(readFileSync(fixture.candidate).length, TEST_MAX_INPUT_BYTES);
+    };
+    applyCurrentPatch(0);
+
+    const ledger = JSON.parse(readFileSync(fixture.results, "utf8"));
+    ledger.source.sha256 = sha256(readFileSync(fixture.source));
+    ledger.candidate.sha256 = sha256(readFileSync(fixture.candidate));
+    for (const sample of ledger.samples) {
+      sample.skill_sha256 = sample.arm === "current"
+        ? ledger.source.sha256
+        : ledger.candidate.sha256;
+      const actorPath = resolve(fixture.root, sample.actor_run.path);
+      const actorRun = JSON.parse(readFileSync(actorPath, "utf8"));
+      actorRun.skill_sha256 = sample.skill_sha256;
+      writeJson(actorPath, actorRun);
+      sample.actor_run.sha256 = sha256(readFileSync(actorPath));
+    }
+    writeJson(fixture.results, ledger);
+    rmSync(fixture.gateReport, { force: true });
+    const gateResult = runCli(gateArgs(fixture));
+    assert.equal(gateResult.status, 0, gateResult.stderr);
+
+    const installed = materializeCopiedPlugin(fixture, {
+      name: "superzhao-skill-lab",
+      version: "9.8.7",
+    });
+    installed.copiedBytes = padCopiedCliTo(
+      readFileSync(installed.copiedCli),
+      TEST_MAX_INPUT_BYTES - 1,
+    );
+    writeFileSync(installed.copiedCli, installed.copiedBytes);
+
+    let lastSize = 0;
+    let plan;
+    for (let attempt = 0; attempt < 6; attempt += 1) {
+      applyCurrentPatch(lastSize);
+      plan = expectedStagePlanOracle(fixture, installed.copiedBytes);
+      if (plan.bundleBytes === TEST_MAX_BUNDLE_BYTES) break;
+      lastSize += TEST_MAX_BUNDLE_BYTES - plan.bundleBytes;
+      assert.ok(lastSize >= 0 && lastSize <= TEST_MAX_INPUT_BYTES, `last size ${lastSize}`);
+    }
+    assert.equal(plan.bundleBytes, TEST_MAX_BUNDLE_BYTES);
+    assert.ok(plan.campaignBytes <= TEST_MAX_CAMPAIGN_BYTES);
+    assert.ok(plan.maxFileBytes <= TEST_MAX_INPUT_BYTES);
+    return { fixture, installed, applyCurrentPatch, lastSize, plan };
+  } catch (error) {
+    fixture.cleanup();
+    throw error;
+  }
+}
+
+let sharedExact96 = null;
+
+function exact96Fixture() {
+  if (sharedExact96) return sharedExact96;
+  const prepared = prepareExact96Workspace();
+  const retainedRoot = mkdtempSync(resolve(tmpdir(), "superzhao-exact96-"));
+  try {
+    const stageResult = runCliAt(
+      prepared.installed.copiedCli,
+      stageArgs(prepared.fixture),
+    );
+    assert.equal(stageResult.status, 0, stageResult.stderr);
+    const actual = actualBundleOracle(prepared.fixture.outputDir);
+    const campaign = trustedCampaignOracle(prepared.fixture.outputDir);
+    assert.equal(actual.bytes, TEST_MAX_BUNDLE_BYTES);
+    assert.ok(campaign.bytes <= BigInt(TEST_MAX_CAMPAIGN_BYTES));
+    const retainedBundle = resolve(retainedRoot, "bundle");
+    cpSync(prepared.fixture.outputDir, retainedBundle, { recursive: true });
+    sharedExact96 = {
+      ...prepared,
+      stageResult,
+      actual,
+      campaign,
+      retainedRoot,
+      retainedBundle,
+      cleanup() {
+        prepared.fixture.cleanup();
+        rmSync(retainedRoot, { recursive: true, force: true });
+      },
+    };
+    return sharedExact96;
+  } catch (error) {
+    prepared.fixture.cleanup();
+    rmSync(retainedRoot, { recursive: true, force: true });
+    throw error;
+  }
+}
+
+test.after(() => {
+  sharedExact96?.cleanup();
+  sharedExact96 = null;
+});
+
+function resizeCampaignToExactLimit(bundle, limit) {
+  const fixed = Array.from({ length: 7 }, () => 8 * 1024 * 1024);
+  let last = 0;
   for (let attempt = 0; attempt < 5; attempt += 1) {
-    const total = writeSizedPriorRejections(bundle, [...fixed, last]);
-    if (total === limit) return { sizes: [...fixed, last], total };
-    last += limit - total;
+    writeSizedPriorRejections(bundle, [...fixed, last]);
+    const oracle = trustedCampaignOracle(bundle);
+    if (oracle.bytes === BigInt(limit)) {
+      return { sizes: [...fixed, last], oracle };
+    }
+    last += Number(BigInt(limit) - oracle.bytes);
     assert.ok(last >= 0 && last <= 8 * 1024 * 1024, `last padding size ${last}`);
   }
-  assert.fail("could not converge on the exact bundle-size boundary");
+  assert.fail("could not converge on the exact campaign-size boundary");
 }
 
 function assertVerifierIntegrityFailure(result) {
@@ -263,10 +551,22 @@ function assertVerifierIntegrityFailure(result) {
   assert.match(result.stderr, /unsafe_path_or_integrity|integrity|bundle|mapping|tree/i);
 }
 
-function runCliAt(cliPath, args) {
+function runCliAt(cliPath, args, options = {}) {
   return spawnSync(process.execPath, [cliPath, ...args], {
     cwd: repoRoot,
     encoding: "utf8",
+    ...options,
+  });
+}
+
+function runWithHookAt(root, cliPath, args, hookSource) {
+  const hook = resolve(root, `hook-${Math.random().toString(16).slice(2)}.cjs`);
+  writeFileSync(hook, hookSource);
+  return runCliAt(cliPath, args, {
+    env: {
+      ...process.env,
+      NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ""} --require=${hook}`.trim(),
+    },
   });
 }
 
@@ -1306,8 +1606,29 @@ test("v3 stage rejects a rejected campaign whose report is forged to final_accep
     writeFileSync(rejected.gateReport, acceptingReport);
 
     const result = runCli(stageArgs(rejected));
-    assert.equal(result.status, 3, result.stderr);
-    assert.match(result.stderr, /unsafe_path_or_integrity|trusted|report|recomput/i);
+    assert.equal(result.status, 4, result.stderr);
+    assert.match(result.stderr, /selection/i);
+    assert.equal(existsSync(rejected.outputDir), false);
+    assertNoStageTemporary(rejected.outputParent);
+  } finally {
+    rejected.cleanup();
+    accepting.cleanup();
+  }
+});
+
+test("v3 stage preserves final rejection priority over a forged final_accept report", () => {
+  const rejected = makeV3CampaignFixture({ mode: "final_reject" });
+  const accepting = makeV3CampaignFixture();
+  try {
+    const acceptingReport = readFileSync(accepting.gateReport);
+    const parsed = JSON.parse(acceptingReport);
+    assert.equal(parsed.selection.status, "selection_pass");
+    assert.equal(parsed.final.status, "final_accept");
+    writeFileSync(rejected.gateReport, acceptingReport);
+
+    const result = runCli(stageArgs(rejected));
+    assert.equal(result.status, 5, result.stderr);
+    assert.match(result.stderr, /held-out|final/i);
     assert.equal(existsSync(rejected.outputDir), false);
     assertNoStageTemporary(rejected.outputParent);
   } finally {
@@ -1632,6 +1953,143 @@ test("v3 stage derives producer identity and bytes from a cache-like copied plug
   }
 });
 
+test("v3 stage keeps its early installed CLI binding through campaign reads", () => {
+  const fixture = makeV3CampaignFixture();
+  try {
+    const installed = materializeCopiedPlugin(fixture, {
+      name: "superzhao-skill-lab",
+      version: "9.8.7",
+    });
+    const original = readFileSync(installed.copiedCli, "utf8");
+    const replacement = original.replace(
+      "cache-like producer fixture 9.8.7",
+      "cache-like producer fixture 9.8.8",
+    );
+    assert.notEqual(replacement, original);
+    assert.equal(Buffer.byteLength(replacement), Buffer.byteLength(original));
+    const hook = `const fs = require("node:fs");\n`
+      + `const path = require("node:path");\n`
+      + `const { syncBuiltinESMExports } = require("node:module");\n`
+      + `const originalOpen = fs.openSync;\n`
+      + `const trigger = ${JSON.stringify(fixture.gateReport)};\n`
+      + `const target = ${JSON.stringify(installed.copiedCli)};\n`
+      + `const replacement = Buffer.from(${JSON.stringify(Buffer.from(replacement).toString("base64"))}, "base64");\n`
+      + `let changed = false;\n`
+      + `fs.openSync = function(value, ...args) {\n`
+      + `  const descriptor = originalOpen.call(this, value, ...args);\n`
+      + `  if (!changed && path.resolve(String(value)) === trigger) {\n`
+      + `    changed = true;\n`
+      + `    fs.writeFileSync(target, replacement);\n`
+      + `  }\n`
+      + `  return descriptor;\n`
+      + `};\n`
+      + `syncBuiltinESMExports();\n`;
+
+    const result = runWithHookAt(
+      fixture.root,
+      installed.copiedCli,
+      stageArgs(fixture),
+      hook,
+    );
+    assertVerifierIntegrityFailure(result);
+    assert.match(result.stderr, /installed producer CLI|installed plugin|changed|binding/i);
+    assert.equal(existsSync(fixture.outputDir), false);
+    assertNoStageTemporary(fixture.outputParent);
+  } finally {
+    fixture.cleanup();
+  }
+});
+
+test("v3 stage preserves selection rejection when the installed binding later differs", () => {
+  const fixture = makeV3CampaignFixture({ mode: "selection_reject" });
+  try {
+    const installed = materializeCopiedPlugin(fixture, {
+      name: "superzhao-skill-lab",
+      version: "9.8.7",
+    });
+    const original = readFileSync(installed.copiedCli, "utf8");
+    const replacement = original.replace(
+      "cache-like producer fixture 9.8.7",
+      "cache-like producer fixture 9.8.8",
+    );
+    assert.notEqual(replacement, original);
+    const hook = `const fs = require("node:fs");\n`
+      + `const path = require("node:path");\n`
+      + `const { syncBuiltinESMExports } = require("node:module");\n`
+      + `const originalOpen = fs.openSync;\n`
+      + `const trigger = ${JSON.stringify(fixture.gateReport)};\n`
+      + `const target = ${JSON.stringify(installed.copiedCli)};\n`
+      + `const replacement = Buffer.from(${JSON.stringify(Buffer.from(replacement).toString("base64"))}, "base64");\n`
+      + `let changed = false;\n`
+      + `fs.openSync = function(value, ...args) {\n`
+      + `  const descriptor = originalOpen.call(this, value, ...args);\n`
+      + `  if (!changed && path.resolve(String(value)) === trigger) {\n`
+      + `    changed = true;\n`
+      + `    fs.writeFileSync(target, replacement);\n`
+      + `  }\n`
+      + `  return descriptor;\n`
+      + `};\n`
+      + `syncBuiltinESMExports();\n`;
+
+    const result = runWithHookAt(
+      fixture.root,
+      installed.copiedCli,
+      stageArgs(fixture),
+      hook,
+    );
+    assert.equal(result.status, 4, result.stderr);
+    assert.equal(result.stdout, "");
+    assert.match(result.stderr, /selection/i);
+    assert.equal(existsSync(fixture.outputDir), false);
+  } finally {
+    fixture.cleanup();
+  }
+});
+
+test("installed producer reads revalidate the final manifest path", () => {
+  const fixture = makeV3CampaignFixture();
+  try {
+    const installed = materializeCopiedPlugin(fixture, {
+      name: "superzhao-skill-lab",
+      version: "9.8.7",
+    });
+    const replacementPath = resolve(fixture.root, "replacement-plugin-manifest.json");
+    writeFileSync(
+      replacementPath,
+      `${JSON.stringify({ name: "superzhao-skill-lab", version: "9.8.8" }, null, 2)}\n`,
+    );
+    const hook = `const fs = require("node:fs");\n`
+      + `const { syncBuiltinESMExports } = require("node:module");\n`
+      + `const originalRead = fs.readSync;\n`
+      + `const target = ${JSON.stringify(installed.manifestPath)};\n`
+      + `const replacement = ${JSON.stringify(replacementPath)};\n`
+      + `const identity = fs.lstatSync(target, { bigint: true });\n`
+      + `let changed = false;\n`
+      + `fs.readSync = function(fd, ...args) {\n`
+      + `  const count = originalRead.call(this, fd, ...args);\n`
+      + `  const opened = fs.fstatSync(fd, { bigint: true });\n`
+      + `  if (!changed && opened.dev === identity.dev && opened.ino === identity.ino) {\n`
+      + `    changed = true;\n`
+      + `    fs.renameSync(replacement, target);\n`
+      + `  }\n`
+      + `  return count;\n`
+      + `};\n`
+      + `syncBuiltinESMExports();\n`;
+
+    const result = runWithHookAt(
+      fixture.root,
+      installed.copiedCli,
+      stageArgs(fixture),
+      hook,
+    );
+    assertVerifierIntegrityFailure(result);
+    assert.match(result.stderr, /installed plugin manifest|changed|binding/i);
+    assert.equal(existsSync(fixture.outputDir), false);
+  } finally {
+    fixture.cleanup();
+  }
+});
+
 test("v3 apply and gate run from a cache-like copied plugin path", () => {
   const fixture = makeV3CampaignFixture();
   try {
@@ -1692,10 +2150,29 @@ test("CLI has only built-in imports, no network or adoption path, and one anchor
   assert.match(source, /spawnSync\(\s*process\.execPath,/);
   assert.match(source, /env:\s*\{\}/, "publisher child must not inherit NODE_OPTIONS");
   assert.doesNotMatch(source, /\bshell\s*:/);
+  assert.doesNotMatch(
+    source,
+    /skillValidator\s*=\s*validateSkill\b/,
+    "edit helpers must not retain the removed legacy validator as a default",
+  );
 
   const result = runCli(["adopt"]);
   assert.equal(result.status, 2);
   assert.match(result.stderr, /unknown command/);
+});
+
+test("bundle artifact kind lookups use a prebuilt mapping index", () => {
+  const source = readFileSync(cli, "utf8");
+  const start = source.indexOf("  assertKind(path, digest, kind, label) {");
+  const end = source.indexOf("\n  entrypoint(name)", start);
+  assert.notEqual(start, -1);
+  assert.notEqual(end, -1);
+  const assertKindBody = source.slice(start, end);
+  assert.doesNotMatch(
+    assertKindBody,
+    /manifestIndex\.mappings\.filter|\.filter\s*\(/,
+    "assertKind must not rescan the complete artifact mapping table",
+  );
 });
 
 test("v3 stage rejects invalid adjacent producer manifests before output inspection", async (t) => {
@@ -1789,6 +2266,43 @@ test("v3 verify-bundle accepts a moved bundle after the producer workspace is de
       },
     });
     assert.equal(result.stdout, canonicalLine(output));
+});
+
+test("v3 verify-bundle binds the manifest read to the first full tree scan", () => {
+  const moved = acceptedVerifierBundle();
+  const copy = cloneBundle(moved.bundle, "manifest-read-scan-race");
+  try {
+    const manifestPath = resolve(copy.bundle, "manifest.json");
+    const original = readFileSync(manifestPath, "utf8");
+    const manifest = JSON.parse(original);
+    const changedId = `${manifest.campaign_id.slice(0, -1)}x`;
+    assert.equal(Buffer.byteLength(changedId), Buffer.byteLength(manifest.campaign_id));
+    const replacement = original.replace(manifest.campaign_id, changedId);
+    assert.notEqual(replacement, original);
+    assert.equal(Buffer.byteLength(replacement), Buffer.byteLength(original));
+    const hook = `const fs = require("node:fs");\n`
+      + `const path = require("node:path");\n`
+      + `const { syncBuiltinESMExports } = require("node:module");\n`
+      + `const originalReaddir = fs.readdirSync;\n`
+      + `const root = ${JSON.stringify(copy.bundle)};\n`
+      + `const manifest = ${JSON.stringify(manifestPath)};\n`
+      + `const replacement = Buffer.from(${JSON.stringify(replacement)});\n`
+      + `let changed = false;\n`
+      + `fs.readdirSync = function(value, ...args) {\n`
+      + `  const result = originalReaddir.call(this, value, ...args);\n`
+      + `  if (!changed && path.resolve(String(value)) === root) {\n`
+      + `    changed = true;\n`
+      + `    fs.writeFileSync(manifest, replacement);\n`
+      + `  }\n`
+      + `  return result;\n`
+      + `};\n`
+      + `syncBuiltinESMExports();\n`;
+    assertVerifierIntegrityFailure(
+      runWithHook({ root: copy.root }, verifyBundleArgs(copy.bundle), hook),
+    );
+  } finally {
+    rmSync(copy.root, { recursive: true, force: true });
+  }
 });
 
 test("v3 verify-bundle rejects unsafe, special, missing, extra, and drifting trees", async (t) => {
@@ -2006,27 +2520,92 @@ test("v3 verify-bundle rejects coherently rehashed semantic payload tampering", 
     }
 });
 
-test("v3 verify-bundle accepts exactly 96 MiB and rejects one actual byte more", () => {
+test("v3 verify-bundle accepts exactly 64 MiB of trusted campaign evidence and rejects one more byte", () => {
   const moved = acceptedVerifierBundle();
-  const copy = cloneBundle(moved.bundle, "bundle-size-boundary");
+  const copy = cloneBundle(moved.bundle, "campaign-size-boundary");
   try {
-    const limit = 96 * 1024 * 1024;
-    const exact = resizeBundleToExactLimit(copy.bundle, limit);
-    assert.equal(exact.total, limit);
+    const limit = 64 * 1024 * 1024;
+    const exact = resizeCampaignToExactLimit(copy.bundle, limit);
+    assert.equal(exact.oracle.bytes, BigInt(limit));
+    assert.ok(
+      exact.oracle.includedMappings > exact.oracle.uniquePhysical,
+      "the oracle fixture must reuse at least one included physical payload",
+    );
     const accepted = runCli(verifyBundleArgs(copy.bundle));
     assert.equal(accepted.status, 0, accepted.stderr);
     assert.equal(JSON.parse(accepted.stdout).status, "final_accept");
 
-    const overflowTotal = writeSizedPriorRejections(copy.bundle, [
+    writeSizedPriorRejections(copy.bundle, [
       ...exact.sizes.slice(0, -1),
       exact.sizes.at(-1) + 1,
     ]);
-    assert.equal(overflowTotal, limit + 1);
+    const overflow = trustedCampaignOracle(copy.bundle);
+    assert.equal(overflow.bytes, BigInt(limit + 1));
     const rejected = runCli(verifyBundleArgs(copy.bundle));
+    assertVerifierIntegrityFailure(rejected);
+    assert.match(rejected.stderr, /64 MiB|67108864|aggregate campaign/i);
+  } finally {
+    rmSync(copy.root, { recursive: true, force: true });
+  }
+});
+
+test("v3 stage accepts an exact 96 MiB plan and rejects one more planned byte", () => {
+  const exact = exact96Fixture();
+  assert.equal(exact.plan.bundleBytes, TEST_MAX_BUNDLE_BYTES);
+  assert.equal(exact.actual.bytes, TEST_MAX_BUNDLE_BYTES);
+  assert.ok(exact.plan.campaignBytes <= TEST_MAX_CAMPAIGN_BYTES);
+  assert.ok(exact.campaign.bytes <= BigInt(TEST_MAX_CAMPAIGN_BYTES));
+  assert.ok(exact.plan.maxFileBytes <= TEST_MAX_INPUT_BYTES);
+  assert.equal(exact.stageResult.stderr, "");
+  assert.match(exact.stageResult.stdout, /^[0-9a-f]{64}\n$/);
+
+  rmSync(exact.fixture.outputDir, { recursive: true, force: true });
+  exact.applyCurrentPatch(exact.lastSize + 1);
+  const overflowPlan = expectedStagePlanOracle(
+    exact.fixture,
+    exact.installed.copiedBytes,
+  );
+  assert.equal(overflowPlan.bundleBytes, TEST_MAX_BUNDLE_BYTES + 1);
+  assert.ok(overflowPlan.campaignBytes <= TEST_MAX_CAMPAIGN_BYTES);
+  assert.ok(overflowPlan.maxFileBytes <= TEST_MAX_INPUT_BYTES);
+
+  const rejected = runCliAt(
+    exact.installed.copiedCli,
+    stageArgs(exact.fixture),
+  );
+  assert.equal(rejected.status, 2, rejected.stderr);
+  assert.equal(rejected.stdout, "");
+  assert.match(rejected.stderr, /96 MiB|100663296|maximum/i);
+  assert.equal(existsSync(exact.fixture.outputDir), false);
+  assertNoStageTemporary(exact.fixture.outputParent);
+});
+
+test("v3 verify-bundle accepts an actual 96 MiB tree and rejects a coherent excluded byte", () => {
+  const exact = exact96Fixture();
+  const accepted = runCli(verifyBundleArgs(exact.retainedBundle));
+  assert.equal(accepted.status, 0, accepted.stderr);
+  assert.equal(accepted.stderr, "");
+  assert.equal(JSON.parse(accepted.stdout).status, "final_accept");
+
+  const overflow = cloneBundle(exact.retainedBundle, "exact96-plus-one");
+  try {
+    const beforeCampaign = trustedCampaignOracle(overflow.bundle);
+    coherentlyRehashPayload(
+      overflow.bundle,
+      "producer-cli",
+      (bytes) => Buffer.concat([bytes, Buffer.from("x")]),
+    );
+    const actual = actualBundleOracle(overflow.bundle);
+    const afterCampaign = trustedCampaignOracle(overflow.bundle);
+    assert.equal(actual.bytes, TEST_MAX_BUNDLE_BYTES + 1);
+    assert.equal(afterCampaign.bytes, beforeCampaign.bytes);
+    assert.ok(afterCampaign.bytes <= BigInt(TEST_MAX_CAMPAIGN_BYTES));
+
+    const rejected = runCli(verifyBundleArgs(overflow.bundle));
     assertVerifierIntegrityFailure(rejected);
     assert.match(rejected.stderr, /96 MiB|100663296|maximum/i);
   } finally {
-    rmSync(copy.root, { recursive: true, force: true });
+    rmSync(overflow.root, { recursive: true, force: true });
   }
 });
 
@@ -2090,6 +2669,54 @@ test("v3 verify-bundle derives verifier identity from a cache-like installed plu
     assert.equal(output.verifier.platform, process.platform);
     assert.equal(output.verifier.arch, process.arch);
     assert.notDeepEqual(output.verifier, output.producer);
+  } finally {
+    rmSync(copy.root, { recursive: true, force: true });
+  }
+});
+
+test("v3 verify-bundle keeps its early installed manifest binding through bundle scans", () => {
+  const moved = acceptedVerifierBundle();
+  const copy = cloneBundle(moved.bundle, "verifier-installed-binding");
+  try {
+    const installed = materializeCopiedPlugin(
+      { root: copy.root },
+      { name: "superzhao-skill-lab", version: "9.8.7" },
+    );
+    const replacementPath = resolve(copy.root, "replacement-plugin-manifest.json");
+    writeFileSync(
+      replacementPath,
+      `${JSON.stringify({ name: "superzhao-skill-lab", version: "9.8.8" }, null, 2)}\n`,
+    );
+    assert.equal(
+      readFileSync(replacementPath).length,
+      readFileSync(installed.manifestPath).length,
+    );
+    const hook = `const fs = require("node:fs");\n`
+      + `const path = require("node:path");\n`
+      + `const { syncBuiltinESMExports } = require("node:module");\n`
+      + `const originalReaddir = fs.readdirSync;\n`
+      + `const bundle = ${JSON.stringify(copy.bundle)};\n`
+      + `const target = ${JSON.stringify(installed.manifestPath)};\n`
+      + `const replacement = ${JSON.stringify(replacementPath)};\n`
+      + `let changed = false;\n`
+      + `fs.readdirSync = function(value, ...args) {\n`
+      + `  const result = originalReaddir.call(this, value, ...args);\n`
+      + `  if (!changed && path.resolve(String(value)) === bundle) {\n`
+      + `    changed = true;\n`
+      + `    fs.renameSync(replacement, target);\n`
+      + `  }\n`
+      + `  return result;\n`
+      + `};\n`
+      + `syncBuiltinESMExports();\n`;
+
+    const result = runWithHookAt(
+      copy.root,
+      installed.copiedCli,
+      verifyBundleArgs(copy.bundle),
+      hook,
+    );
+    assertVerifierIntegrityFailure(result);
+    assert.match(result.stderr, /installed plugin manifest|changed|binding/i);
   } finally {
     rmSync(copy.root, { recursive: true, force: true });
   }

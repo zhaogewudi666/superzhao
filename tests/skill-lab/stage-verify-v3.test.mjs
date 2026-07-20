@@ -652,6 +652,36 @@ function anchoredPostLinkInPlaceRewriteHook(relativePath) {
   );
 }
 
+function manifestLinkAndRecoveryAcknowledgementLossHook() {
+  return `const childProcess = require("node:child_process");\n`
+    + `const { syncBuiltinESMExports } = require("node:module");\n`
+    + `const original = childProcess.spawnSync;\n`
+    + `const protocol = "superzhao.skill-lab.anchored-publisher/v1";\n`
+    + `let linkAcknowledgementLost = false;\n`
+    + `childProcess.spawnSync = function(command, args, options) {\n`
+    + `  let request;\n`
+    + `  try { request = JSON.parse(String(options?.input ?? "")); } catch {}\n`
+    + `  if (command === process.execPath && request?.protocol === protocol\n`
+    + `      && request.action === "link-from-parent" && !linkAcknowledgementLost) {\n`
+    + `    linkAcknowledgementLost = true;\n`
+    + `    const actual = original.call(this, command, args, options);\n`
+    + `    const error = new Error("synthetic link acknowledgement loss");\n`
+    + `    error.code = "ENOBUFS";\n`
+    + `    return { ...actual, error };\n`
+    + `  }\n`
+    + `  if (command === process.execPath && request?.protocol === protocol\n`
+    + `      && request.action === "inspect" && request.name === "manifest.json"\n`
+    + `      && linkAcknowledgementLost) {\n`
+    + `    const actual = original.call(this, command, args, options);\n`
+    + `    const error = new Error("synthetic recovery acknowledgement loss");\n`
+    + `    error.code = "ENOBUFS";\n`
+    + `    return { ...actual, error };\n`
+    + `  }\n`
+    + `  return original.call(this, command, args, options);\n`
+    + `};\n`
+    + `syncBuiltinESMExports();\n`;
+}
+
 function reserveCallerOutput(fixture, content = "caller-owned output\n") {
   mkdirSync(fixture.outputDir, { mode: 0o700 });
   const sentinel = resolve(fixture.outputDir, "owned-by-caller.txt");
@@ -1279,6 +1309,25 @@ test("v3 stage recovers a committed manifest after a generic publisher child err
 
     const result = runWithHook(fixture, stageArgs(fixture), hook);
     assertCommittedStageBundle(fixture, result);
+    assertNoStageTemporary(fixture.outputParent);
+  } finally {
+    fixture.cleanup();
+  }
+});
+
+test("v3 stage removes manifest when link and recovery acknowledgements are both lost", () => {
+  const fixture = makeV3CampaignFixture();
+  try {
+    const result = runWithHook(
+      fixture,
+      stageArgs(fixture),
+      manifestLinkAndRecoveryAcknowledgementLossHook(),
+    );
+
+    assert.equal(result.status, 6, result.stderr);
+    assert.equal(result.stdout, "");
+    assert.match(result.stderr, /acknowledgement|publication_failure/i);
+    assert.equal(existsSync(resolve(fixture.outputDir, "manifest.json")), false);
     assertNoStageTemporary(fixture.outputParent);
   } finally {
     fixture.cleanup();

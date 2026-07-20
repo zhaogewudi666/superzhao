@@ -3567,6 +3567,14 @@ function verifyPublishedStageFile(file) {
 }
 
 function linkPublishedStageFileFromParent(parent, sourceParent, sourceFile, name, label) {
+  const file = {
+    parent,
+    name,
+    identity: sourceFile.identity,
+    label,
+    expectedBytes: sourceFile.expectedBytes,
+    expectedSha256: sourceFile.expectedSha256,
+  };
   let result;
   try {
     result = invokeAnchoredV3Publisher(parent, {
@@ -3578,25 +3586,26 @@ function linkPublishedStageFileFromParent(parent, sourceParent, sourceFile, name
     });
   } catch (error) {
     if (!(error instanceof PublisherAcknowledgementError)) throw error;
-    const committed = invokeAnchoredV3Publisher(parent, {
-      action: "inspect",
-      name,
-      expected_file: v3ExpectedFile(sourceFile.identity),
-    });
-    if (committed !== "owned") throw error;
+    let committed;
+    try {
+      committed = invokeAnchoredV3Publisher(parent, {
+        action: "inspect",
+        name,
+        expected_file: v3ExpectedFile(sourceFile.identity),
+      });
+    } catch (recoveryError) {
+      removePublishedStageFileIfOwned(file);
+      throw recoveryError;
+    }
+    if (committed !== "owned") {
+      removePublishedStageFileIfOwned(file);
+      throw error;
+    }
     result = "linked";
   }
   if (result !== "linked") {
     throw classifiedError("publication_failure", `${label} was not linked`);
   }
-  const file = {
-    parent,
-    name,
-    identity: sourceFile.identity,
-    label,
-    expectedBytes: sourceFile.expectedBytes,
-    expectedSha256: sourceFile.expectedSha256,
-  };
   try {
     verifyPublishedStageFile(file);
     return file;

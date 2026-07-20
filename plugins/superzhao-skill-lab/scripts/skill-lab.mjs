@@ -66,12 +66,15 @@ const {
   mkdirSync,
   openSync,
   readFileSync,
+  readSync,
   rmdirSync,
   unlinkSync,
   writeFileSync,
 } = require("node:fs");
+const { createHash } = require("node:crypto");
 
 const PROTOCOL = "superzhao.skill-lab.anchored-publisher/v1";
+const MAX_BOUND_FILE_BYTES = 8 * 1024 * 1024;
 
 class PublisherError extends Error {
   constructor(status, message) {
@@ -339,6 +342,63 @@ function inspectOwned(request) {
   return "owned";
 }
 
+function inspectOwnedContent(request) {
+  const name = requireBasename(request.name, "owned file");
+  const expected = parseIdentity(request.expected_file, "owned file");
+  if (!Number.isInteger(request.expected_bytes)
+      || request.expected_bytes < 0
+      || request.expected_bytes > MAX_BOUND_FILE_BYTES) {
+    fail("unsafe_path_or_integrity", "owned file expected byte length is invalid");
+  }
+  if (typeof request.expected_sha256 !== "string"
+      || !/^[0-9a-f]{64}$/.test(request.expected_sha256)) {
+    fail("unsafe_path_or_integrity", "owned file expected digest is invalid");
+  }
+  anchorWorkingDirectory(request);
+  const before = requireOwned(name, expected, "owned file");
+  if (before.size !== BigInt(request.expected_bytes)
+      || (before.mode & 0o777n) !== 0o600n
+      || (typeof process.geteuid === "function" && before.uid !== BigInt(process.geteuid()))) {
+    fail("unsafe_path_or_integrity", "owned file mode, ownership, or size changed");
+  }
+
+  let descriptor;
+  try {
+    descriptor = openSync(name, constants.O_RDONLY | constants.O_NOFOLLOW);
+    const opened = fstatSync(descriptor, { bigint: true });
+    if (!opened.isFile() || !sameIdentity(opened, expected)
+        || opened.size !== BigInt(request.expected_bytes)
+        || (opened.mode & 0o777n) !== 0o600n
+        || (typeof process.geteuid === "function"
+          && opened.uid !== BigInt(process.geteuid()))) {
+      fail("unsafe_path_or_integrity", "owned file binding changed while it was opened");
+    }
+
+    const bytes = Buffer.allocUnsafe(request.expected_bytes + 1);
+    let length = 0;
+    while (length < bytes.length) {
+      const count = readSync(descriptor, bytes, length, bytes.length - length, length);
+      if (count === 0) break;
+      length += count;
+    }
+    const after = fstatSync(descriptor, { bigint: true });
+    const afterPath = requireOwned(name, expected, "owned file");
+    for (const field of ["dev", "ino", "size", "mtimeNs", "ctimeNs", "mode", "uid"]) {
+      if (opened[field] !== after[field] || opened[field] !== afterPath[field]) {
+        fail("unsafe_path_or_integrity", "owned file changed during content verification");
+      }
+    }
+    if (length !== request.expected_bytes
+        || createHash("sha256").update(bytes.subarray(0, length)).digest("hex")
+          !== request.expected_sha256) {
+      fail("unsafe_path_or_integrity", "owned file bytes do not match their binding");
+    }
+  } finally {
+    if (descriptor !== undefined) closeSync(descriptor);
+  }
+  return "bound";
+}
+
 function removeOwned(request) {
   const name = requireBasename(request.name, "owned file");
   const expected = parseIdentity(request.expected_file, "owned file");
@@ -358,6 +418,7 @@ function main() {
     else if (request.action === "link") result = publishLink(request);
     else if (request.action === "link-from-parent") result = publishLinkFromParent(request);
     else if (request.action === "inspect") result = inspectOwned(request);
+    else if (request.action === "inspect-content") result = inspectOwnedContent(request);
     else if (request.action === "unlink") result = removeOwned(request);
     else fail("unsafe_path_or_integrity", "anchored publisher action is invalid");
     process.stdout.write(JSON.stringify({ ok: true, result }));
@@ -846,6 +907,7 @@ function anchoredV3SuccessResultIsValid(action, result) {
   }
   if (action === "link" || action === "link-from-parent") return result === "linked";
   if (action === "inspect") return new Set(["absent", "foreign", "owned"]).has(result);
+  if (action === "inspect-content") return result === "bound";
   if (action === "unlink") return new Set(["foreign", "removed"]).has(result);
   return false;
 }
@@ -3180,6 +3242,7 @@ function buildStageBundlePlan({
 }) {
   const payloads = new Map();
   const mappings = new Map();
+  const logicalMappings = new Map();
 
   function addPayload(path, bytes, label) {
     const normalized = workspaceRelativeParts(path, label).join("/");
@@ -3196,11 +3259,23 @@ function buildStageBundlePlan({
 
   function addMapping(kind, artifact, sourcePath, packagedPath) {
     const path = addPayload(packagedPath, artifact.bytes, `${kind} packaged path`);
+    const normalizedSource = sourcePath === null
+      ? null
+      : workspaceRelativeParts(sourcePath, `${kind} source_path`).join("/");
+    if (normalizedSource !== null) {
+      const identity = `${path}\0${artifact.sha256}`;
+      const existing = logicalMappings.get(normalizedSource);
+      if (existing !== undefined && existing !== identity) {
+        throw classifiedError(
+          "unsafe_path_or_integrity",
+          `conflicting source_path mapping: ${normalizedSource}`,
+        );
+      }
+      logicalMappings.set(normalizedSource, identity);
+    }
     const mapping = {
       kind,
-      ...(sourcePath === null
-        ? {}
-        : { source_path: workspaceRelativeParts(sourcePath, `${kind} source_path`).join("/") }),
+      ...(normalizedSource === null ? {} : { source_path: normalizedSource }),
       packaged_path: path,
       sha256: artifact.sha256,
     };
@@ -3320,6 +3395,7 @@ function buildStageBundlePlan({
     artifacts,
     files,
   };
+  validateV3BundleManifest(manifest);
   const manifestBuffer = Buffer.from(canonicalJsonLine(manifest));
   if (manifestBuffer.length > MAX_INPUT_BYTES) {
     throw new CliError(
@@ -3462,21 +3538,30 @@ function createPublishedStageFile(parent, name, bytes, label) {
     }),
     label,
   );
-  const file = { parent, name, identity, label };
+  const file = {
+    parent,
+    name,
+    identity,
+    label,
+    expectedBytes: bytes.length,
+    expectedSha256: sha256(bytes),
+  };
   verifyPublishedStageFile(file);
   return file;
 }
 
 function verifyPublishedStageFile(file) {
   const result = invokeAnchoredV3Publisher(file.parent, {
-    action: "inspect",
+    action: "inspect-content",
     name: file.name,
     expected_file: v3ExpectedFile(file.identity),
+    expected_bytes: file.expectedBytes,
+    expected_sha256: file.expectedSha256,
   });
-  if (result !== "owned") {
+  if (result !== "bound") {
     throw classifiedError(
       "unsafe_path_or_integrity",
-      `${file.label} physical identity changed during publication`,
+      `${file.label} physical identity or bytes changed during publication`,
     );
   }
 }
@@ -3504,9 +3589,21 @@ function linkPublishedStageFileFromParent(parent, sourceParent, sourceFile, name
   if (result !== "linked") {
     throw classifiedError("publication_failure", `${label} was not linked`);
   }
-  const file = { parent, name, identity: sourceFile.identity, label };
-  verifyPublishedStageFile(file);
-  return file;
+  const file = {
+    parent,
+    name,
+    identity: sourceFile.identity,
+    label,
+    expectedBytes: sourceFile.expectedBytes,
+    expectedSha256: sourceFile.expectedSha256,
+  };
+  try {
+    verifyPublishedStageFile(file);
+    return file;
+  } catch (error) {
+    removePublishedStageFileIfOwned(file);
+    throw error;
+  }
 }
 
 function removePublishedStageFileIfOwned(file) {
@@ -3557,9 +3654,6 @@ function publishStageBundle(workspace, outputInput, plan, verifyInstalledProduce
       createPublishedStageFile(directories.get(parentPath), name, bytes, `bundle payload ${path}`),
     );
   }
-  for (const file of publishedFiles) verifyPublishedStageFile(file);
-  for (const directory of directories.values()) directory.verify();
-
   // Write the manifest outside the bundle first. The final trust anchor appears
   // atomically as a no-replace hard link only after every byte and inode check succeeds.
   const manifestSource = createPublishedStageFile(
@@ -3571,6 +3665,9 @@ function publishStageBundle(workspace, outputInput, plan, verifyInstalledProduce
   let manifestFile;
   try {
     verifyInstalledProducer();
+    for (const file of publishedFiles) verifyPublishedStageFile(file);
+    for (const directory of directories.values()) directory.verify();
+    verifyPublishedStageFile(manifestSource);
     manifestFile = linkPublishedStageFileFromParent(
       root,
       destination.anchor,
@@ -3578,6 +3675,10 @@ function publishStageBundle(workspace, outputInput, plan, verifyInstalledProduce
       "manifest.json",
       "bundle manifest",
     );
+    for (const file of publishedFiles) verifyPublishedStageFile(file);
+    for (const directory of directories.values()) directory.verify();
+    verifyPublishedStageFile(manifestFile);
+    root.verify();
     verifyInstalledProducer();
   } catch (error) {
     if (manifestFile) removePublishedStageFileIfOwned(manifestFile);
@@ -3585,8 +3686,6 @@ function publishStageBundle(workspace, outputInput, plan, verifyInstalledProduce
   } finally {
     removePublishedStageFileIfOwned(manifestSource);
   }
-  verifyPublishedStageFile(manifestFile);
-  root.verify();
   process.stdout.write(`${sha256(plan.manifestBuffer)}\n`);
 }
 

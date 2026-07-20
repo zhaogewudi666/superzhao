@@ -635,6 +635,23 @@ function anchoredChildResultHook(predicate, resultBody, { executeChild = true } 
     + `syncBuiltinESMExports();\n`;
 }
 
+function anchoredPostLinkInPlaceRewriteHook(relativePath) {
+  return anchoredChildResultHook(
+    `request.action === "link-from-parent"`,
+    `const fs = require("node:fs");
+    const path = require("node:path");
+    const target = path.resolve(options.cwd, ${JSON.stringify(relativePath)});
+    const before = fs.lstatSync(target, { bigint: true });
+    const bytes = fs.readFileSync(target);
+    fs.writeFileSync(target, Buffer.alloc(bytes.length, 0x78));
+    const after = fs.lstatSync(target, { bigint: true });
+    if (before.dev !== after.dev || before.ino !== after.ino) {
+      throw new Error("test hook did not preserve the published inode");
+    }
+    return actual;`,
+  );
+}
+
 function reserveCallerOutput(fixture, content = "caller-owned output\n") {
   mkdirSync(fixture.outputDir, { mode: 0o700 });
   const sentinel = resolve(fixture.outputDir, "owned-by-caller.txt");
@@ -1148,6 +1165,38 @@ test("v3 stage publishes a canonical complete manifest and prints its digest", (
         assert.equal(sha256(file.bytes), descriptor.sha256, file.path);
       }
     }
+  } finally {
+    fixture.cleanup();
+  }
+});
+
+test("v3 stage rejects an in-place payload rewrite before completing publication", () => {
+  const fixture = makeV3CampaignFixture();
+  try {
+    const hook = anchoredPostLinkInPlaceRewriteHook("skills/source/SKILL.md");
+    const result = runWithHook(fixture, stageArgs(fixture), hook);
+
+    assert.equal(result.status, 3, result.stderr);
+    assert.equal(result.stdout, "");
+    assert.match(result.stderr, /unsafe_path_or_integrity|physical|bytes|digest/i);
+    assert.equal(existsSync(resolve(fixture.outputDir, "manifest.json")), false);
+    assertNoStageTemporary(fixture.outputParent);
+  } finally {
+    fixture.cleanup();
+  }
+});
+
+test("v3 stage removes an in-place rewritten manifest instead of printing a trust anchor", () => {
+  const fixture = makeV3CampaignFixture();
+  try {
+    const hook = anchoredPostLinkInPlaceRewriteHook("manifest.json");
+    const result = runWithHook(fixture, stageArgs(fixture), hook);
+
+    assert.equal(result.status, 3, result.stderr);
+    assert.equal(result.stdout, "");
+    assert.match(result.stderr, /unsafe_path_or_integrity|physical|bytes|digest/i);
+    assert.equal(existsSync(resolve(fixture.outputDir, "manifest.json")), false);
+    assertNoStageTemporary(fixture.outputParent);
   } finally {
     fixture.cleanup();
   }
@@ -1779,6 +1828,33 @@ test("v3 stage rejects patch support that is absent from the campaign inventory"
     const result = runCli(stageArgs(fixture));
     assert.equal(result.status, 2, result.stderr);
     assert.match(result.stderr, /supporting_case_ids|campaign inventory|unknown case/i);
+    assert.equal(existsSync(fixture.outputDir), false);
+  } finally {
+    fixture.cleanup();
+  }
+});
+
+test("v3 stage rejects a source path mapped to conflicting packaged payloads", () => {
+  const fixture = makeV3CampaignFixture();
+  try {
+    const patch = JSON.parse(readFileSync(fixture.edits, "utf8"));
+    const ledger = JSON.parse(readFileSync(fixture.results, "utf8"));
+    patch.prior_rejections.push({
+      rejection_id: "source-path-mapping-conflict",
+      report: ledger.source,
+      relationship: "not-applicable",
+      note: "A source Skill is not a separately packaged prior-rejection report.",
+    });
+    writeJson(fixture.edits, patch);
+    rmSync(fixture.candidate);
+    rmSync(fixture.applyReport);
+    const applyResult = runCli(applyArgs(fixture));
+    assert.equal(applyResult.status, 0, applyResult.stderr);
+
+    const result = runCli(stageArgs(fixture));
+    assert.equal(result.status, 3, result.stderr);
+    assert.equal(result.stdout, "");
+    assert.match(result.stderr, /conflicting source_path mapping|mapping/i);
     assert.equal(existsSync(fixture.outputDir), false);
   } finally {
     fixture.cleanup();

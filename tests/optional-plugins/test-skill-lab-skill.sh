@@ -43,9 +43,36 @@ if ! grep -Fq '$superzhao-skill-lab:optimize-agent-skill' "$OPENAI"; then
   exit 1
 fi
 
-for command in '"$SKILL_LAB_CLI" apply' '"$SKILL_LAB_CLI" gate' '"$SKILL_LAB_CLI" stage'; do
+for command in \
+  '"$SKILL_LAB_CLI" apply' \
+  '"$SKILL_LAB_CLI" gate' \
+  '"$SKILL_LAB_CLI" stage' \
+  '"$SKILL_LAB_CLI" verify-bundle'; do
   if ! grep -Fq "$command" "$REFERENCE"; then
     printf 'FAIL: campaign reference does not document %s\n' "$command" >&2
+    exit 1
+  fi
+done
+
+for required in \
+  '# Skill Lab v3 campaign format' \
+  'superzhao.skill-lab.patch/v3' \
+  'superzhao.skill-lab.cases/v3' \
+  'superzhao.skill-lab.samples/v3' \
+  'superzhao.skill-lab.bundle-manifest/v3'; do
+  if ! grep -Fq "$required" "$REFERENCE"; then
+    printf 'FAIL: campaign reference is not bound to the production v3 contract: %s\n' "$required" >&2
+    exit 1
+  fi
+done
+
+for stale in \
+  '# Skill Lab v2 campaign format' \
+  '"schema_version": 2' \
+  'All JSON schemas below are version 2' \
+  'cannot affect the decision'; do
+  if grep -Fqi "$stale" "$REFERENCE"; then
+    printf 'FAIL: campaign reference retains an incompatible v2 contract: %s\n' "$stale" >&2
     exit 1
   fi
 done

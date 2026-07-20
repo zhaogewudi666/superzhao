@@ -171,6 +171,22 @@
         "sha256": {
           "$ref": "#/$defs/sha256"
         }
+      },
+      "if": {
+        "required": ["kind"],
+        "properties": {
+          "kind": {
+            "const": "producer-cli"
+          }
+        }
+      },
+      "then": {
+        "not": {
+          "required": ["source_path"]
+        }
+      },
+      "else": {
+        "required": ["source_path"]
       }
     },
     "file": {

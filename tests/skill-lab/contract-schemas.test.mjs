@@ -281,10 +281,40 @@ test("bundle manifest does not confuse the 1000-row sample cap with a file cap",
   })));
   expanded.artifacts.push(...Array.from({ length: 1001 }, (_, index) => ({
     kind: "transcript",
+    source_path: `campaign/transcripts/transcript-${index}.json`,
     packaged_path: `evidence/transcript-${index}.bin`,
     sha256: "a".repeat(64),
   })));
   assertValid(expanded, schema, "bundle file count is bounded by 96 MiB, not sample rows");
+});
+
+test("bundle artifact source paths match the production verifier contract", () => {
+  const { schema, example } = readSchemaPair("bundle-manifest");
+
+  const missingSource = clone(example);
+  const nonProducer = missingSource.artifacts.find((row) => row.kind !== "producer-cli");
+  delete nonProducer.source_path;
+  assertInvalid(
+    missingSource,
+    schema,
+    "every non-producer mapping requires source_path",
+  );
+
+  const producer = example.artifacts.find((row) => row.kind === "producer-cli");
+  assert.equal(
+    Object.hasOwn(producer, "source_path"),
+    false,
+    "the golden producer mapping must omit source_path",
+  );
+
+  const producerWithSource = clone(example);
+  producerWithSource.artifacts.find((row) => row.kind === "producer-cli").source_path =
+    "plugins/superzhao-skill-lab/scripts/skill-lab.mjs";
+  assertInvalid(
+    producerWithSource,
+    schema,
+    "producer-cli mapping forbids source_path",
+  );
 });
 
 test("actor, scorer, sample, report, and manifest examples share stable cross-references", () => {

@@ -83,7 +83,6 @@
     },
     {
       "kind": "producer-cli",
-      "source_path": "plugins/superzhao-skill-lab/scripts/skill-lab.mjs",
       "packaged_path": "producer/skill-lab.mjs",
       "sha256": "2468ace013579bdf2468ace013579bdf2468ace013579bdf2468ace013579bdf"
     }
